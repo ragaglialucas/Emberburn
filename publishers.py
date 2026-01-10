@@ -1097,6 +1097,207 @@ class ModbusTCPPublisher(DataPublisher):
         return self.tag_register_map.copy()
 
 
+class GraphQLPublisher(DataPublisher):
+    """
+    GraphQL API Publisher - Modern query interface
+    
+    Provides a GraphQL endpoint for querying tag data with advanced features:
+    - Flexible queries (get specific fields you need)
+    - Real-time subscriptions (future)
+    - Typed schema with introspection
+    - Query batching
+    - Filtering and pagination
+    
+    GraphQL is like REST API but you're in control of exactly what data you get back.
+    No more over-fetching, no more under-fetching. Just vibes.
+    """
+    
+    def __init__(self, config: Dict[str, Any], logger: Optional[logging.Logger] = None):
+        """
+        Initialize the GraphQL publisher.
+        
+        Config structure:
+        {
+            "enabled": true,
+            "host": "0.0.0.0",
+            "port": 5002,
+            "graphiql": true,  // Enable GraphiQL web interface
+            "cors_enabled": true
+        }
+        """
+        super().__init__(config, logger)
+        
+        if not GRAPHQL_AVAILABLE:
+            self.logger.warning("GraphQL libraries not available. Install with: pip install graphene flask-graphql")
+            self.enabled = False
+            return
+        
+        self.app = Flask(__name__)
+        if config.get("cors_enabled", True):
+            CORS(self.app)
+        
+        self.tags_data = {}  # In-memory tag storage
+        self.server_thread = None
+        
+        # Build GraphQL schema
+        self._setup_schema()
+        
+        # Add GraphQL endpoint
+        host = config.get("host", "0.0.0.0")
+        port = config.get("port", 5002)
+        graphiql = config.get("graphiql", True)
+        
+        self.app.add_url_rule(
+            '/graphql',
+            view_func=GraphQLView.as_view(
+                'graphql',
+                schema=self.schema,
+                graphiql=graphiql  # Enable GraphiQL IDE
+            )
+        )
+        
+        self.logger.info(f"GraphQL publisher initialized on http://{host}:{port}/graphql")
+        if graphiql:
+            self.logger.info(f"GraphiQL IDE available at http://{host}:{port}/graphql")
+    
+    def _setup_schema(self):
+        """Setup GraphQL schema with types and queries."""
+        
+        # Define Tag type
+        class TagType(graphene.ObjectType):
+            name = graphene.String(description="Tag name")
+            value = graphene.Field(
+                graphene.String,
+                description="Tag value (can be string, float, int, or bool)"
+            )
+            type = graphene.String(description="Data type of the tag")
+            timestamp = graphene.Float(description="Last update timestamp")
+            
+            def resolve_value(self, info):
+                # Return value as string for generic handling
+                return str(self.value) if self.value is not None else None
+        
+        # Define Statistics type
+        class TagStatsType(graphene.ObjectType):
+            count = graphene.Int(description="Total number of tags")
+            tags = graphene.List(graphene.String, description="List of tag names")
+        
+        # Define Query type
+        class Query(graphene.ObjectType):
+            # Get single tag
+            tag = graphene.Field(
+                TagType,
+                name=graphene.String(required=True, description="Tag name to query"),
+                description="Query a single tag by name"
+            )
+            
+            # Get all tags
+            tags = graphene.List(
+                TagType,
+                filter=graphene.String(description="Filter tags by name pattern"),
+                description="Query all tags, optionally filtered"
+            )
+            
+            # Get tag statistics
+            stats = graphene.Field(
+                TagStatsType,
+                description="Get statistics about available tags"
+            )
+            
+            def resolve_tag(self, info, name):
+                """Resolve single tag query."""
+                if name in self.tags_data:
+                    tag_data = self.tags_data[name]
+                    return TagType(
+                        name=name,
+                        value=tag_data.get('value'),
+                        type=tag_data.get('type', 'unknown'),
+                        timestamp=tag_data.get('timestamp')
+                    )
+                return None
+            
+            def resolve_tags(self, info, filter=None):
+                """Resolve all tags query with optional filtering."""
+                tags = []
+                for name, tag_data in self.tags_data.items():
+                    # Apply filter if provided
+                    if filter and filter.lower() not in name.lower():
+                        continue
+                    
+                    tags.append(TagType(
+                        name=name,
+                        value=tag_data.get('value'),
+                        type=tag_data.get('type', 'unknown'),
+                        timestamp=tag_data.get('timestamp')
+                    ))
+                return tags
+            
+            def resolve_stats(self, info):
+                """Resolve stats query."""
+                return TagStatsType(
+                    count=len(self.tags_data),
+                    tags=list(self.tags_data.keys())
+                )
+        
+        # Bind tags_data to Query class for resolvers
+        Query.tags_data = self.tags_data
+        
+        # Create schema
+        self.schema = graphene.Schema(query=Query)
+    
+    def start(self):
+        """Start the GraphQL API server."""
+        if not self.enabled or not GRAPHQL_AVAILABLE:
+            if not GRAPHQL_AVAILABLE:
+                self.logger.warning("GraphQL publisher is disabled (libraries not available)")
+            else:
+                self.logger.info("GraphQL publisher is disabled")
+            return
+        
+        try:
+            host = self.config.get("host", "0.0.0.0")
+            port = self.config.get("port", 5002)
+            
+            def run_server():
+                self.app.run(host=host, port=port, debug=False, use_reloader=False)
+            
+            self.server_thread = threading.Thread(target=run_server, daemon=True)
+            self.server_thread.start()
+            
+            self.logger.info(f"GraphQL API server started on http://{host}:{port}/graphql")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to start GraphQL publisher: {e}")
+    
+    def stop(self):
+        """Stop the GraphQL API server."""
+        # Flask doesn't have a graceful shutdown in this mode
+        # The daemon thread will stop when the main process stops
+        self.logger.info("GraphQL publisher stopped")
+    
+    def publish(self, tag_name: str, value: Any, timestamp: Optional[float] = None):
+        """
+        Update tag value in GraphQL data store.
+        
+        Args:
+            tag_name: Name of the tag
+            value: Tag value
+            timestamp: Optional timestamp
+        """
+        if not self.enabled or not GRAPHQL_AVAILABLE:
+            return
+        
+        # Determine type
+        value_type = type(value).__name__
+        
+        # Store tag data
+        self.tags_data[tag_name] = {
+            "value": value,
+            "type": value_type,
+            "timestamp": timestamp or time.time()
+        }
+
+
 class OPCUAClientPublisher(DataPublisher):
     """
     OPC UA Client Publisher - Push data to other OPC UA servers
