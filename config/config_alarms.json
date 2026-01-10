@@ -1,0 +1,84 @@
+{
+  "publishers": {
+    "alarms": {
+      "enabled": true,
+      "rules": [
+        {
+          "name": "High Temperature Alert",
+          "tag": "Temperature",
+          "condition": ">",
+          "threshold": 24.0,
+          "priority": "CRITICAL",
+          "debounce_seconds": 60,
+          "message": "Temperature is dangerously high!",
+          "auto_clear": true,
+          "channels": ["log", "email", "slack"]
+        },
+        {
+          "name": "Low Temperature Warning",
+          "tag": "Temperature",
+          "condition": "<",
+          "threshold": 16.0,
+          "priority": "WARNING",
+          "debounce_seconds": 120,
+          "message": "Temperature is below acceptable range",
+          "auto_clear": true,
+          "channels": ["log", "slack"]
+        },
+        {
+          "name": "High Pressure Alert",
+          "tag": "Pressure",
+          "condition": ">",
+          "threshold": 102.5,
+          "priority": "CRITICAL",
+          "debounce_seconds": 30,
+          "message": "System pressure too high!",
+          "auto_clear": true,
+          "channels": ["log", "email", "slack", "sms"]
+        },
+        {
+          "name": "Production Counter Rollover",
+          "tag": "Counter",
+          "condition": ">",
+          "threshold": 950,
+          "priority": "INFO",
+          "debounce_seconds": 300,
+          "message": "Production counter approaching rollover",
+          "auto_clear": true,
+          "channels": ["log"]
+        }
+      ],
+      "notifications": {
+        "email": {
+          "enabled": false,
+          "smtp_server": "smtp.gmail.com",
+          "smtp_port": 587,
+          "username": "your-email@gmail.com",
+          "password": "your-app-password",
+          "from": "opcua-alarms@fireball.local",
+          "to": [
+            "alerts@fireball.local",
+            "ops-team@fireball.local"
+          ]
+        },
+        "slack": {
+          "enabled": false,
+          "webhook_url": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+          "channel": "#alarms",
+          "username": "OPC UA Alarm Bot"
+        },
+        "sms": {
+          "enabled": false,
+          "account_sid": "your-twilio-account-sid",
+          "auth_token": "your-twilio-auth-token",
+          "from_number": "+15555551234",
+          "to_numbers": [
+            "+15555555678",
+            "+15555559999"
+          ]
+        }
+      },
+      "history_size": 1000
+    }
+  }
+}

@@ -160,6 +160,29 @@
         "location": "factory_floor"
       },
       "description": "InfluxDB time-series database for historical data"
+    },
+    "alarms": {
+      "enabled": false,
+      "rules": [
+        {
+          "name": "High Temperature Alert",
+          "tag": "Temperature",
+          "condition": ">",
+          "threshold": 24.0,
+          "priority": "CRITICAL",
+          "debounce_seconds": 60,
+          "message": "Temperature is too high!",
+          "auto_clear": true,
+          "channels": ["log", "slack"]
+        }
+      ],
+      "notifications": {
+        "email": {"enabled": false},
+        "slack": {"enabled": false},
+        "sms": {"enabled": false}
+      },
+      "history_size": 1000,
+      "description": "Alarms and notifications system"
     }
   }
 }

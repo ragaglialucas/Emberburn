@@ -40,8 +40,9 @@ Great for development, testing, demos, or just pretending you have a fully instr
 - **🆕 GraphQL API**: Modern query interface - REST's cooler younger sibling
 - **🆕 MODBUS TCP**: Legacy PLC and SCADA support - Respect your elders (even if they're from 1979)
 - **🆕 InfluxDB**: Time-series database storage + Grafana dashboards - Historical data that doesn't lie
+- **🆕 Alarms**: Threshold-based alerting via email/Slack/SMS - Sleep soundly (or don't, when things break)
 - **🆕 OPC UA Client**: Push data to other OPC UA servers (Ignition, historians) - Bidirectional baby!
-- **🆕 Multi-Protocol**: Run 11 protocols simultaneously - Because we have issues
+- **🆕 Multi-Protocol**: Run 12 protocols simultaneously - Because we have issues
 
 ## Quick Start
 
@@ -388,6 +389,7 @@ Found a bug? Have an idea? PRs welcome. Please include:
 - [OPC UA Client Mode](docs/OPCUA_CLIENT_CONFIGURATION.md) - Push to other OPC UA servers
 - [GraphQL Integration](docs/GRAPHQL_INTEGRATION.md) - Modern query interface
 - [InfluxDB + Grafana](docs/INFLUXDB_GRAFANA_INTEGRATION.md) - Time-series storage and visualization
+- [Alarms & Notifications](docs/ALARMS_NOTIFICATIONS.md) - Alerting via email/Slack/SMS
 
 All docs written in Patrick Ryan's signature style - snarky but helpful.
 

@@ -11,6 +11,7 @@ import json
 import logging
 import threading
 import time
+import requests  # For HTTP requests (Slack webhooks, etc.)
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 import paho.mqtt.client as mqtt
@@ -70,6 +71,19 @@ try:
     INFLUXDB_AVAILABLE = True
 except ImportError:
     INFLUXDB_AVAILABLE = False
+
+# Email and notification libraries (mostly built-in)
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime, timedelta
+from collections import deque
+
+try:
+    from twilio.rest import Client as TwilioClient
+    TWILIO_AVAILABLE = True
+except ImportError:
+    TWILIO_AVAILABLE = False
 
 
 class DataPublisher(ABC):
@@ -1104,6 +1118,391 @@ class ModbusTCPPublisher(DataPublisher):
         return self.tag_register_map.copy()
 
 
+class AlarmsPublisher(DataPublisher):
+    """
+    Alarms & Notifications Publisher - Because sometimes things go wrong
+    
+    Monitors tag values against configurable thresholds and sends alerts via:
+    - Email (SMTP)
+    - Slack (Webhooks)
+    - SMS (Twilio)
+    - Logging (always enabled)
+    
+    Features:
+    - Threshold-based alerting (>, <, ==, !=)
+    - Priority levels (INFO, WARNING, CRITICAL)
+    - Debouncing (avoid spam)
+    - Alarm history
+    - Multiple notification channels
+    - Auto-clear when values return to normal
+    
+    Because at 3 AM, you want to know if the reactor temperature is getting spicy.
+    """
+    
+    PRIORITY_INFO = "INFO"
+    PRIORITY_WARNING = "WARNING"
+    PRIORITY_CRITICAL = "CRITICAL"
+    
+    def __init__(self, config: Dict[str, Any], logger: Optional[logging.Logger] = None):
+        """
+        Initialize the alarms publisher.
+        
+        Config structure:
+        {
+            "enabled": true,
+            "rules": [
+                {
+                    "name": "High Temperature",
+                    "tag": "Temperature",
+                    "condition": ">",
+                    "threshold": 25.0,
+                    "priority": "CRITICAL",
+                    "debounce_seconds": 60,
+                    "message": "Temperature is too high!"
+                }
+            ],
+            "notifications": {
+                "email": {...},
+                "slack": {...},
+                "sms": {...}
+            },
+            "history_size": 1000
+        }
+        """
+        super().__init__(config, logger)
+        
+        self.rules = config.get("rules", [])
+        self.notifications_config = config.get("notifications", {})
+        self.history_size = config.get("history_size", 1000)
+        
+        # Active alarms tracking
+        self.active_alarms = {}  # tag_name -> alarm_info
+        self.alarm_history = deque(maxlen=self.history_size)
+        
+        # Last notification time per rule (for debouncing)
+        self.last_notification = {}  # rule_name -> timestamp
+        
+        # Parse rules
+        self.parsed_rules = []
+        for rule in self.rules:
+            self.parsed_rules.append({
+                "name": rule.get("name", "Unnamed Rule"),
+                "tag": rule.get("tag"),
+                "condition": rule.get("condition", ">"),
+                "threshold": rule.get("threshold"),
+                "priority": rule.get("priority", self.PRIORITY_WARNING),
+                "debounce_seconds": rule.get("debounce_seconds", 60),
+                "message": rule.get("message", "Alarm triggered"),
+                "auto_clear": rule.get("auto_clear", True),
+                "channels": rule.get("channels", ["log"])  # log, email, slack, sms
+            })
+        
+        self.logger.info(f"Alarms publisher initialized with {len(self.parsed_rules)} rules")
+    
+    def start(self):
+        """Start the alarms publisher."""
+        if not self.enabled:
+            self.logger.info("Alarms publisher is disabled")
+            return
+        
+        self.running = True
+        self.logger.info(f"Alarms publisher started - monitoring {len(self.parsed_rules)} rules")
+    
+    def stop(self):
+        """Stop the alarms publisher."""
+        self.running = False
+        self.logger.info("Alarms publisher stopped")
+    
+    def publish(self, tag_name: str, value: Any, timestamp: Optional[float] = None):
+        """
+        Check tag value against alarm rules.
+        
+        Args:
+            tag_name: Name of the tag
+            value: Tag value
+            timestamp: Optional timestamp
+        """
+        if not self.enabled or not self.running:
+            return
+        
+        # Check each rule that applies to this tag
+        for rule in self.parsed_rules:
+            if rule["tag"] != tag_name:
+                continue
+            
+            # Evaluate condition
+            triggered = self._evaluate_condition(value, rule["condition"], rule["threshold"])
+            
+            rule_key = f"{rule['name']}_{tag_name}"
+            
+            if triggered:
+                # Alarm condition met
+                if rule_key not in self.active_alarms:
+                    # New alarm
+                    self._trigger_alarm(rule, tag_name, value, timestamp)
+                else:
+                    # Alarm already active, just update value
+                    self.active_alarms[rule_key]["last_value"] = value
+                    self.active_alarms[rule_key]["last_update"] = timestamp or time.time()
+            else:
+                # Alarm condition not met
+                if rule_key in self.active_alarms and rule["auto_clear"]:
+                    # Clear alarm
+                    self._clear_alarm(rule, tag_name, value, timestamp)
+    
+    def _evaluate_condition(self, value: Any, condition: str, threshold: Any) -> bool:
+        """Evaluate if value meets alarm condition."""
+        try:
+            if condition == ">":
+                return float(value) > float(threshold)
+            elif condition == ">=":
+                return float(value) >= float(threshold)
+            elif condition == "<":
+                return float(value) < float(threshold)
+            elif condition == "<=":
+                return float(value) <= float(threshold)
+            elif condition == "==":
+                return value == threshold
+            elif condition == "!=":
+                return value != threshold
+            else:
+                self.logger.warning(f"Unknown condition: {condition}")
+                return False
+        except (ValueError, TypeError) as e:
+            self.logger.error(f"Error evaluating condition: {e}")
+            return False
+    
+    def _trigger_alarm(self, rule: Dict, tag_name: str, value: Any, timestamp: Optional[float]):
+        """Trigger a new alarm."""
+        rule_key = f"{rule['name']}_{tag_name}"
+        now = timestamp or time.time()
+        
+        # Check debounce
+        if rule_key in self.last_notification:
+            time_since_last = now - self.last_notification[rule_key]
+            if time_since_last < rule["debounce_seconds"]:
+                self.logger.debug(f"Alarm {rule_key} debounced ({time_since_last:.1f}s < {rule['debounce_seconds']}s)")
+                return
+        
+        # Create alarm record
+        alarm = {
+            "rule_name": rule["name"],
+            "tag": tag_name,
+            "priority": rule["priority"],
+            "message": rule["message"],
+            "condition": f"{rule['condition']} {rule['threshold']}",
+            "triggered_value": value,
+            "last_value": value,
+            "triggered_at": now,
+            "last_update": now,
+            "cleared_at": None,
+            "status": "ACTIVE"
+        }
+        
+        self.active_alarms[rule_key] = alarm
+        self.alarm_history.append(alarm.copy())
+        
+        # Send notifications
+        self._send_notifications(alarm, rule["channels"])
+        
+        self.last_notification[rule_key] = now
+        
+        # Log
+        priority_emoji = {"INFO": "ℹ️", "WARNING": "⚠️", "CRITICAL": "🚨"}
+        emoji = priority_emoji.get(rule["priority"], "⚠️")
+        self.logger.warning(
+            f"{emoji} ALARM TRIGGERED: {rule['name']} - {tag_name}={value} {rule['condition']} {rule['threshold']} - {rule['message']}"
+        )
+    
+    def _clear_alarm(self, rule: Dict, tag_name: str, value: Any, timestamp: Optional[float]):
+        """Clear an active alarm."""
+        rule_key = f"{rule['name']}_{tag_name}"
+        now = timestamp or time.time()
+        
+        alarm = self.active_alarms[rule_key]
+        alarm["status"] = "CLEARED"
+        alarm["cleared_at"] = now
+        alarm["cleared_value"] = value
+        
+        # Update history
+        self.alarm_history.append(alarm.copy())
+        
+        # Remove from active
+        del self.active_alarms[rule_key]
+        
+        # Log
+        self.logger.info(
+            f"✅ ALARM CLEARED: {rule['name']} - {tag_name}={value} (was {alarm['triggered_value']})"
+        )
+        
+        # Optionally send clear notification
+        if "clear" in rule.get("channels", []):
+            clear_alarm = alarm.copy()
+            clear_alarm["message"] = f"CLEARED: {rule['message']}"
+            self._send_notifications(clear_alarm, rule["channels"])
+    
+    def _send_notifications(self, alarm: Dict, channels: list):
+        """Send alarm notifications to configured channels."""
+        for channel in channels:
+            if channel == "log":
+                # Already logged
+                pass
+            elif channel == "email":
+                self._send_email(alarm)
+            elif channel == "slack":
+                self._send_slack(alarm)
+            elif channel == "sms":
+                self._send_sms(alarm)
+    
+    def _send_email(self, alarm: Dict):
+        """Send email notification."""
+        email_config = self.notifications_config.get("email", {})
+        if not email_config.get("enabled", False):
+            return
+        
+        try:
+            smtp_server = email_config.get("smtp_server", "localhost")
+            smtp_port = email_config.get("smtp_port", 587)
+            username = email_config.get("username", "")
+            password = email_config.get("password", "")
+            from_addr = email_config.get("from", "opcua@fireball.local")
+            to_addrs = email_config.get("to", [])
+            
+            if not to_addrs:
+                return
+            
+            # Create message
+            msg = MIMEMultipart()
+            msg["From"] = from_addr
+            msg["To"] = ", ".join(to_addrs)
+            msg["Subject"] = f"[{alarm['priority']}] {alarm['rule_name']} - {alarm['tag']}"
+            
+            body = f"""
+            Alarm: {alarm['rule_name']}
+            Priority: {alarm['priority']}
+            Tag: {alarm['tag']}
+            Value: {alarm['triggered_value']}
+            Condition: {alarm['condition']}
+            Message: {alarm['message']}
+            Time: {datetime.fromtimestamp(alarm['triggered_at']).strftime('%Y-%m-%d %H:%M:%S')}
+            Status: {alarm['status']}
+            """
+            
+            msg.attach(MIMEText(body, "plain"))
+            
+            # Send
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                if username and password:
+                    server.starttls()
+                    server.login(username, password)
+                server.send_message(msg)
+            
+            self.logger.info(f"Email notification sent for alarm: {alarm['rule_name']}")
+            
+        except Exception as e:
+            self.logger.error(f"Error sending email notification: {e}")
+    
+    def _send_slack(self, alarm: Dict):
+        """Send Slack notification via webhook."""
+        slack_config = self.notifications_config.get("slack", {})
+        if not slack_config.get("enabled", False):
+            return
+        
+        try:
+            webhook_url = slack_config.get("webhook_url")
+            if not webhook_url:
+                return
+            
+            # Priority colors
+            color_map = {
+                "INFO": "#36a64f",
+                "WARNING": "#ff9900",
+                "CRITICAL": "#ff0000"
+            }
+            
+            # Create Slack message
+            payload = {
+                "attachments": [
+                    {
+                        "color": color_map.get(alarm["priority"], "#808080"),
+                        "title": f"[{alarm['priority']}] {alarm['rule_name']}",
+                        "text": alarm["message"],
+                        "fields": [
+                            {"title": "Tag", "value": alarm["tag"], "short": True},
+                            {"title": "Value", "value": str(alarm["triggered_value"]), "short": True},
+                            {"title": "Condition", "value": alarm["condition"], "short": True},
+                            {"title": "Status", "value": alarm["status"], "short": True}
+                        ],
+                        "footer": "OPC UA Alarm System",
+                        "ts": int(alarm["triggered_at"])
+                    }
+                ]
+            }
+            
+            response = requests.post(webhook_url, json=payload, timeout=5)
+            response.raise_for_status()
+            
+            self.logger.info(f"Slack notification sent for alarm: {alarm['rule_name']}")
+            
+        except Exception as e:
+            self.logger.error(f"Error sending Slack notification: {e}")
+    
+    def _send_sms(self, alarm: Dict):
+        """Send SMS notification via Twilio."""
+        if not TWILIO_AVAILABLE:
+            self.logger.warning("Twilio library not available for SMS notifications")
+            return
+        
+        sms_config = self.notifications_config.get("sms", {})
+        if not sms_config.get("enabled", False):
+            return
+        
+        try:
+            account_sid = sms_config.get("account_sid")
+            auth_token = sms_config.get("auth_token")
+            from_number = sms_config.get("from_number")
+            to_numbers = sms_config.get("to_numbers", [])
+            
+            if not all([account_sid, auth_token, from_number, to_numbers]):
+                return
+            
+            client = TwilioClient(account_sid, auth_token)
+            
+            message_body = f"[{alarm['priority']}] {alarm['rule_name']}: {alarm['tag']}={alarm['triggered_value']} {alarm['condition']}. {alarm['message']}"
+            
+            for to_number in to_numbers:
+                client.messages.create(
+                    body=message_body,
+                    from_=from_number,
+                    to=to_number
+                )
+            
+            self.logger.info(f"SMS notification sent for alarm: {alarm['rule_name']}")
+            
+        except Exception as e:
+            self.logger.error(f"Error sending SMS notification: {e}")
+    
+    def get_active_alarms(self) -> list:
+        """Get list of currently active alarms."""
+        return list(self.active_alarms.values())
+    
+    def get_alarm_history(self, limit: int = 100) -> list:
+        """Get alarm history."""
+        history_list = list(self.alarm_history)
+        return history_list[-limit:] if limit else history_list
+    
+    def acknowledge_alarm(self, rule_name: str, tag_name: str, user: str = "system"):
+        """Acknowledge an active alarm (doesn't clear it, just marks as acknowledged)."""
+        rule_key = f"{rule_name}_{tag_name}"
+        if rule_key in self.active_alarms:
+            self.active_alarms[rule_key]["acknowledged"] = True
+            self.active_alarms[rule_key]["acknowledged_by"] = user
+            self.active_alarms[rule_key]["acknowledged_at"] = time.time()
+            self.logger.info(f"Alarm acknowledged by {user}: {rule_name} - {tag_name}")
+            return True
+        return False
+
+
 class InfluxDBPublisher(DataPublisher):
     """
     InfluxDB Publisher - Time-series database storage
@@ -1802,6 +2201,13 @@ class PublisherManager:
             influxdb_pub = InfluxDBPublisher(influxdb_config, self.logger)
             self.publishers.append(influxdb_pub)
             self.logger.info("InfluxDB publisher initialized")
+        
+        # Alarms Publisher
+        alarms_config = publishers_config.get("alarms", {})
+        if alarms_config.get("enabled", False):
+            alarms_pub = AlarmsPublisher(alarms_config, self.logger)
+            self.publishers.append(alarms_pub)
+            self.logger.info("Alarms publisher initialized")
         
         # OPC UA Client Publisher
         opcua_client_config = publishers_config.get("opcua_client", {})

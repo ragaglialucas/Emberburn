@@ -77,6 +77,7 @@ Is it overkill? Absolutely. Will it save your bacon when some legacy PLC from 19
 | 9 | MODBUS TCP | Server | 502 | ← Inbound | Legacy PLCs poll | "Talking to grandpa's PLC" |
 | 10 | GraphQL | Server | 5002 | ← Inbound | Modern query interface | "REST but you pick the fields" |
 | 11 | InfluxDB | Client | N/A | → Outbound | Time-series database | "Remembering everything forever" |
+| 12 | Alarms | Monitor | N/A | → Outbound | Notifications | "Screaming when things break" |
 
 ---
 

@@ -11,3 +11,4 @@ pymodbus==3.5.4
 graphene==3.3
 flask-graphql==2.0.1
 influxdb-client==1.38.0
+twilio==8.10.0
