@@ -1,8 +1,88 @@
+# Python
 __pycache__/
-*.pyc
-.git
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
 .env
+.venv
+env/
 venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# Documentation (exclude from image, but keep README)
 *.md
 !README.md
+docs/
+
+# Kubernetes/Helm
+helm/
+kubernetes/
+k8s/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.circleci/
+
+# Testing
+test/
+tests/
+*.test
+*.spec
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs and databases
+*.log
+*.db
+*.sqlite
+*.sqlite3
 data/*.db
+data/*.log
+
+# Scripts that aren't needed in container
+scripts/
+systemd/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
