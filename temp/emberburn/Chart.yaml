@@ -1,0 +1,47 @@
+annotations:
+  catalog.cattle.io/categories: Forge Industrial,IoT Gateway,SCADA,OPC UA,Monitoring
+  catalog.cattle.io/certified: partner
+  catalog.cattle.io/display-name: Emberburn
+  catalog.cattle.io/featured: "true"
+  catalog.cattle.io/hidden: "false"
+  catalog.cattle.io/namespace: cattle-monitoring-system
+  catalog.cattle.io/os: linux
+  catalog.cattle.io/release-name: emberburn
+  catalog.cattle.io/type: cluster-tool
+  catalog.cattle.io/upstream-version: 1.0.0
+  fireball.industries/branding: emberburn
+  fireball.industries/project-type: industrial-iot-gateway
+  fireball.industries/protocols: "15"
+  fireball.industries/web-ui: "true"
+apiVersion: v2
+appVersion: 1.0.0
+description: 'OPC UA Industrial IoT Gateway with 15 protocol support and fire-themed
+  web UI. Because your industrial data deserves to be as hot as your infrastructure.  EmberBurn
+  is a multi-protocol industrial IoT gateway featuring OPC UA server, MQTT, REST API,
+  GraphQL, Sparkplug B, Kafka, AMQP, WebSocket, Modbus TCP, Prometheus metrics, InfluxDB
+  integration, alarms, data transformation, SQLite persistence, and a beautiful Python
+  Flask web UI for configuration and monitoring. '
+home: https://fireballz.ai/emberburn
+icon: https://fireballindustries.com/assets/emberburn-icon.svg
+keywords:
+- opcua
+- industrial-iot
+- scada
+- mqtt
+- modbus
+- prometheus
+- graphql
+- data-transformation
+- emberburn
+- fireball-industries
+- forge-industrial
+maintainers:
+- email: patrick@fireball-industries.com
+  name: Patrick Ryan
+  url: https://fireballz.ai
+name: emberburn
+sources:
+- https://github.com/Embernet-ai/helm-charts
+- https://github.com/Embernet-ai/Small-Application
+type: application
+version: 1.0.0

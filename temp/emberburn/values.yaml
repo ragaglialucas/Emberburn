@@ -1,0 +1,388 @@
+# Default values for EmberBurn - Multi-Protocol Industrial IoT Gateway
+# "Where Data Meets Fire" - Fireball Industries
+
+# Namespace configuration
+namespace:
+  name: emberburn
+  create: true
+  labels:
+    app: emberburn
+    managed-by: fireball-industries
+    podstore-type: industrial-iot
+
+# Pod configuration
+pod:
+  replicaCount: 1
+  
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+  
+  labels: {}
+  
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: ""
+
+# EmberBurn container configuration
+emberburn:
+  image:
+    repository: ghcr.io/ragaglialucas/emberburn
+    tag: "latest"
+    pullPolicy: Always  # Use Always for development, IfNotPresent for production
+  
+  # OPC UA Server configuration
+  opcua:
+    updateInterval: 2.0
+    logLevel: "INFO"
+    endpoint: "opc.tcp://0.0.0.0:4840/freeopcua/server/"
+    serverName: "EmberBurn Industrial IoT Gateway"
+    namespace: "http://fireballindustries.com/emberburn"
+    deviceName: "EmberBurn"
+  
+  # Protocol ports
+  ports:
+    opcua: 4840       # OPC UA Server
+    webui: 5000       # REST API + Web UI
+    prometheus: 8000  # Prometheus metrics
+    modbus: 5020      # Modbus TCP (if enabled)
+    websocket: 9001   # WebSocket (if enabled)
+  
+  # Environment variables
+  env:
+    pythonUnbuffered: "1"
+    updateInterval: "2.0"
+    logLevel: "INFO"
+  
+  # Resource presets (small, medium, large, custom)
+  resources:
+    preset: "medium"
+    
+    # Custom resources (used when preset: custom)
+    custom:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"
+    
+    # Preset definitions
+    presets:
+      small:
+        requests:
+          cpu: "100m"
+          memory: "256Mi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
+      
+      medium:
+        requests:
+          cpu: "250m"
+          memory: "512Mi"
+        limits:
+          cpu: "1000m"
+          memory: "2Gi"
+      
+      large:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "2000m"
+          memory: "4Gi"
+  
+  # Health checks
+  livenessProbe:
+    enabled: true
+    tcpSocket:
+      port: 4840
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  
+  readinessProbe:
+    enabled: true
+    tcpSocket:
+      port: 4840
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  
+  # Security context
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false  # EmberBurn writes logs and data
+    capabilities:
+      drop:
+        - ALL
+
+# Configuration - Tags and Publishers
+config:
+  # Use existing config from existing chart or define new
+  useExisting: false
+  
+  # Config file to use (must exist in container)
+  configFile: "config_transformations_demo.json"
+  
+  # Custom tags configuration (JSON)
+  tags:
+    Temperature:
+      type: "float"
+      initial_value: 20.0
+      simulate: true
+      simulation_type: "sine"
+      min: 15.0
+      max: 30.0
+      units: "°C"
+      description: "Ambient temperature"
+    
+    Pressure:
+      type: "float"
+      initial_value: 101.3
+      simulate: true
+      simulation_type: "random"
+      min: 95.0
+      max: 105.0
+      units: "kPa"
+      description: "System pressure"
+    
+    RunHours:
+      type: "int"
+      initial_value: 0
+      simulate: true
+      simulation_type: "increment"
+      increment: 1
+      max: 10000
+      reset_on_max: true
+      description: "Equipment run hours"
+    
+    SystemStatus:
+      type: "string"
+      initial_value: "Running"
+      simulate: false
+      description: "System operational status"
+  
+  # Publishers configuration
+  publishers:
+    # REST API & Web UI (always enabled)
+    rest_api:
+      enabled: true
+      host: "0.0.0.0"
+      port: 5000
+    
+    # MQTT Publisher
+    mqtt:
+      enabled: false
+      broker: "mosquitto-mqtt-pod"
+      port: 1883
+      client_id: "emberburn"
+      username: ""
+      password: ""
+      use_tls: false
+      topic_prefix: "industrial/emberburn"
+      qos: 1
+      retain: false
+    
+    # InfluxDB Storage
+    influxdb:
+      enabled: false
+      url: "http://influxdb-pod:8086"
+      token: ""
+      org: "fireball-industries"
+      bucket: "emberburn"
+      measurement: "tags"
+    
+    # Prometheus Metrics
+    prometheus:
+      enabled: true
+      port: 8000
+      path: "/metrics"
+    
+    # Sparkplug B (Ignition Edge)
+    sparkplug:
+      enabled: false
+      broker: "mosquitto-mqtt-pod"
+      port: 1883
+      group_id: "Fireball"
+      edge_node_id: "EmberBurn"
+    
+    # GraphQL API
+    graphql:
+      enabled: false
+      port: 5000
+      path: "/graphql"
+    
+    # Data Transformation
+    data_transformation:
+      enabled: true
+      transformations: []
+      computed_tags: []
+    
+    # Alarms
+    alarms:
+      enabled: true
+      check_interval: 5
+      notifications:
+        email:
+          enabled: false
+          smtp_server: ""
+          smtp_port: 587
+          username: ""
+          password: ""
+          from_address: "emberburn@fireballindustries.com"
+          to_addresses: []
+        slack:
+          enabled: false
+          webhook_url: ""
+    
+    # SQLite Persistence
+    sqlite_persistence:
+      enabled: true
+      db_file: "/app/data/emberburn.db"
+      log_interval: 60
+
+# Persistent storage configuration
+persistence:
+  enabled: true
+  
+  # Storage class (leave empty for default)
+  storageClass: ""
+  
+  # Storage size
+  size: "10Gi"
+  
+  # Access mode
+  accessMode: ReadWriteOnce
+  
+  # Mount path in container
+  mountPath: /app/data
+  
+  # Annotations
+  annotations: {}
+
+# Service configuration
+service:
+  # OPC UA Service
+  opcua:
+    type: ClusterIP
+    port: 4840
+    targetPort: 4840
+    protocol: TCP
+    annotations: {}
+  
+  # Web UI / REST API Service
+  webui:
+    type: LoadBalancer
+    port: 5000
+    targetPort: 5000
+    protocol: TCP
+    # NodePort (only used if type: NodePort)
+    nodePort: null
+    annotations: {}
+  
+  # Prometheus Metrics Service
+  prometheus:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+    annotations: {}
+  
+  labels: {}
+
+# Ingress configuration (for Web UI)
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations:
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: emberburn.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: emberburn-tls
+  #    hosts:
+  #      - emberburn.example.com
+
+# Node selector
+nodeSelector: {}
+#  node-role.kubernetes.io/industrial-iot: "true"
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# Network Policy
+networkPolicy:
+  enabled: false
+  policyTypes:
+    - Ingress
+    - Egress
+  
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 5000
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 4840
+  
+  egress:
+    - {}  # Allow all egress by default
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Monitoring
+monitoring:
+  enabled: false
+  serviceMonitor:
+    enabled: false
+    interval: "30s"
+    scrapeTimeout: "10s"
+    labels: {}
+
+# External dependencies (optional integrations)
+external:
+  # MQTT Broker (if not using external)
+  mqtt:
+    deploy: false
+    service: "mosquitto.default.svc.cluster.local"
+    port: 1883
+  
+  # InfluxDB (if not using external)
+  influxdb:
+    deploy: false
+    service: "influxdb.default.svc.cluster.local"
+    port: 8086
