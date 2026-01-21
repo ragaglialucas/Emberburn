@@ -1,0 +1,93 @@
+name: Publish Helm Chart to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'helm/opcua-server/**'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+
+      - name: Package Helm Chart
+        run: |
+          cd helm/opcua-server
+          helm package .
+          mv emberburn-*.tgz ../../
+
+      - name: Checkout gh-pages branch
+        run: |
+          git fetch origin gh-pages || git checkout --orphan gh-pages
+          git checkout gh-pages || git checkout --orphan gh-pages
+          git rm -rf . || true
+
+      - name: Copy packaged chart
+        run: |
+          git checkout main -- emberburn-*.tgz || git checkout master -- emberburn-*.tgz
+          mkdir -p charts
+          mv emberburn-*.tgz charts/
+
+      - name: Generate Helm repo index
+        run: |
+          helm repo index charts --url https://ragaglialucas.github.io/Emberburn/charts
+          mv charts/index.yaml .
+
+      - name: Create index.html
+        run: |
+          cat > index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Emberburn Helm Repository</title>
+              <style>
+                  body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+                  h1 { color: #ff6b35; }
+                  code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+              </style>
+          </head>
+          <body>
+              <h1>🔥 Emberburn Helm Repository</h1>
+              <p>OPC UA Industrial IoT Gateway with multi-protocol support</p>
+              
+              <h2>Add Repository</h2>
+              <pre><code>helm repo add emberburn https://ragaglialucas.github.io/Emberburn
+          helm repo update</code></pre>
+              
+              <h2>Install Chart</h2>
+              <pre><code>helm install emberburn emberburn/emberburn</code></pre>
+              
+              <h2>For Rancher</h2>
+              <p>Add this URL as a Helm repository:</p>
+              <pre><code>https://ragaglialucas.github.io/Emberburn</code></pre>
+          </body>
+          </html>
+          EOF
+
+      - name: Commit and push to gh-pages
+        run: |
+          git add .
+          git commit -m "Publish Helm chart from ${GITHUB_SHA}" || echo "No changes to commit"
+          git push origin gh-pages --force
