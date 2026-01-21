@@ -1,0 +1,44 @@
+name: Release Helm Chart
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'helm/opcua-server/**'
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+
+      - name: Log in to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Package Helm Chart
+        run: |
+          cd helm/opcua-server
+          helm package .
+
+      - name: Push Helm Chart to GHCR
+        run: |
+          cd helm/opcua-server
+          helm push emberburn-*.tgz oci://ghcr.io/ragaglialucas
+
+      - name: Chart Published
+        run: |
+          echo "Chart published to oci://ghcr.io/ragaglialucas/emberburn"
