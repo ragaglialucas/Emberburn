@@ -41,6 +41,7 @@ jobs:
           cd ../../_site
           helm repo index charts --url https://ragaglialucas.github.io/Emberburn/charts
           cp charts/index.yaml .
+          touch .nojekyll
 
       - name: Create index.html
         run: |
