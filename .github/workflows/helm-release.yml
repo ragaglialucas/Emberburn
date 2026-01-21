@@ -37,7 +37,7 @@ jobs:
       - name: Push Helm Chart to GHCR
         run: |
           cd helm/opcua-server
-          helm push emberburn-*.tgz oci://ghcr.io/ragaglialucas/charts
+          helm push emberburn-*.tgz oci://ghcr.io/ragaglialucas
 
       - name: Chart Published
         run: |
