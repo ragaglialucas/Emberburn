@@ -1,5 +1,6 @@
 apiVersion: v2
 name: emberburn
+# Trigger Helm chart release
 description: |
   OPC UA Industrial IoT Gateway with 15 protocol support and fire-themed web UI.
   Because your industrial data deserves to be as hot as your infrastructure.
