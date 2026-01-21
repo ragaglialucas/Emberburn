@@ -41,12 +41,13 @@ icon: https://fireballindustries.com/assets/emberburn-icon.svg
 
 # Rancher Questions Annotation
 annotations:
-  catalog.cattle.io/display-name: "Emberburn"
-  catalog.cattle.io/release-name: emberburn
+  catalog.cattle.io/categories: Industrial IoT,OPC UA,Monitoring,SCADA
   catalog.cattle.io/certified: partner
+  catalog.cattle.io/display-name: "Emberburn"
   catalog.cattle.io/namespace: cattle-monitoring-system
+  catalog.cattle.io/os: linux
+  catalog.cattle.io/release-name: emberburn
   catalog.cattle.io/type: cluster-tool
-  catalog.cattle.io/ui-component: none
   
   # UI Categories
   catalog.cattle.io/categories: "Forge Industrial,IoT Gateway,SCADA,OPC UA,Monitoring"
