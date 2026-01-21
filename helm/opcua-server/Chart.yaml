@@ -11,7 +11,7 @@ description: |
   persistence, and a beautiful Python Flask web UI for configuration and monitoring.
 
 type: application
-version: 1.0.1
+version: 1.0.2
 appVersion: "1.0.0"
 
 keywords:
@@ -48,15 +48,8 @@ annotations:
   catalog.cattle.io/os: linux
   catalog.cattle.io/release-name: emberburn
   catalog.cattle.io/type: cluster-tool
-  
-  # UI Categories
-  catalog.cattle.io/categories: "Forge Industrial,IoT Gateway,SCADA,OPC UA,Monitoring"
-  
-  # Feature highlights
   catalog.cattle.io/featured: "true"
   catalog.cattle.io/hidden: "false"
-  
-  # Documentation links
   catalog.cattle.io/upstream-version: "1.0.0"
   fireball.industries/project-type: "industrial-iot-gateway"
   fireball.industries/protocols: "15"
