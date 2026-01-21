@@ -40,14 +40,10 @@ icon: https://fireballindustries.com/assets/emberburn-icon.svg
 
 # Rancher Questions Annotation
 annotations:
-  catalog.cattle.io/certified: "fireball"
-  catalog.cattle.io/release-name: "emberburn"
-  catalog.cattle.io/display-name: "EmberBurn - Multi-Protocol IoT Gateway"
-  catalog.cattle.io/provides-gvr: "apps/v1/Deployment"
-  catalog.cattle.io/namespace: "emberburn"
-  catalog.cattle.io/os: "linux"
-  catalog.cattle.io/kube-version: ">=1.25.0"
-  catalog.cattle.io/rancher-version: ">=2.6.0"
+  catalog.cattle.io/display-name: "Emberburn"
+  catalog.cattle.io/release-name: emberburn
+  catalog.cattle.io/certified: partner
+  catalog.cattle.io/namespace: cattle-monitoring-system
   
   # Auto-install behavior
   catalog.cattle.io/auto-install: "emberburn=match"
