@@ -1,0 +1,21 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.serviceMonitor }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "postgresql-pod.fullname" . }}
+  namespace: {{ .Values.monitoring.serviceMonitor.namespace | default (include "postgresql-pod.namespace" .) }}
+  labels:
+    {{- include "postgresql-pod.labels" . | nindent 4 }}
+    {{- with .Values.monitoring.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "postgresql-pod.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.monitoring.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.monitoring.serviceMonitor.scrapeTimeout }}
+      path: /metrics
+{{- end }}

@@ -1,0 +1,50 @@
+# Minimal PostgreSQL Configuration
+# For development and testing environments
+# DO NOT USE IN PRODUCTION
+
+deploymentMode: standalone
+resourcePreset: small
+
+postgresql:
+  auth:
+    database: dev_database
+    username: developer
+    # Password will be auto-generated
+  
+  extensions:
+    timescaledb:
+      enabled: false
+    postgis:
+      enabled: false
+    pgStatStatements:
+      enabled: false
+  
+  initialDatabases:
+    - name: dev_database
+      owner: developer
+      encoding: UTF8
+      locale: en_US.utf8
+
+persistence:
+  enabled: true
+  size: 10Gi
+
+backup:
+  enabled: false  # Save resources in dev
+
+monitoring:
+  enabled: false  # Not needed for dev
+
+pgbouncer:
+  enabled: false
+
+security:
+  tls:
+    enabled: false  # Relaxed for dev
+  
+  podSecurityContext:
+    runAsNonRoot: false  # Easier debugging
+
+development:
+  enabled: true
+  sampleData: false

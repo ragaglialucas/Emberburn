@@ -1,0 +1,29 @@
+{{- if .Values.grafana.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "grafana-loki.fullname" . }}-grafana
+  namespace: {{ include "grafana-loki.namespace" . }}
+  labels:
+    {{- include "grafana-loki.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+  {{- with .Values.service.grafana.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.grafana.type }}
+  {{- if and (eq .Values.service.grafana.type "LoadBalancer") .Values.service.grafana.loadBalancerIP }}
+  loadBalancerIP: {{ .Values.service.grafana.loadBalancerIP }}
+  {{- end }}
+  ports:
+    - port: {{ .Values.service.grafana.port }}
+      targetPort: {{ .Values.service.grafana.targetPort }}
+      protocol: TCP
+      name: http
+      {{- if and (eq .Values.service.grafana.type "NodePort") .Values.service.grafana.nodePort }}
+      nodePort: {{ .Values.service.grafana.nodePort }}
+      {{- end }}
+  selector:
+    {{- include "grafana-loki.selectorLabels" . | nindent 4 }}
+{{- end }}

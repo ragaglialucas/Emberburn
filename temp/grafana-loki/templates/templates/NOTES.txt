@@ -1,0 +1,115 @@
+🎉 Grafana + Loki Pod has been deployed!
+
+RELEASE: {{ .Release.Name }}
+NAMESPACE: {{ include "grafana-loki.namespace" . }}
+VERSION: Grafana {{ .Values.grafana.image.tag }} + Loki {{ .Values.loki.image.tag }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 DEPLOYMENT INFO
+
+{{- if .Values.grafana.enabled }}
+  ✅ Grafana: ENABLED
+  - Resource Preset: {{ .Values.grafana.resources.preset }}
+  - Storage: {{ if .Values.grafana.persistence.enabled }}{{ .Values.grafana.persistence.size }}{{ else }}EmptyDir{{ end }}
+{{- else }}
+  ⚠️  Grafana: DISABLED
+{{- end }}
+
+{{- if .Values.loki.enabled }}
+  ✅ Loki: ENABLED
+  - Resource Preset: {{ .Values.loki.resources.preset }}
+  - Storage: {{ if .Values.loki.persistence.enabled }}{{ .Values.loki.persistence.size }}{{ else }}EmptyDir{{ end }}
+  - Retention: {{ .Values.loki.config.limits.retentionPeriod }}
+{{- else }}
+  ⚠️  Loki: DISABLED
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌐 ACCESSING GRAFANA
+
+{{- if eq .Values.service.grafana.type "LoadBalancer" }}
+
+1️⃣ Get LoadBalancer IP:
+
+   kubectl get svc {{ include "grafana-loki.fullname" . }}-grafana -n {{ include "grafana-loki.namespace" . }}
+
+2️⃣ Access Grafana:
+
+   http://<EXTERNAL-IP>:{{ .Values.service.grafana.port }}
+
+{{- else if eq .Values.service.grafana.type "NodePort" }}
+
+1️⃣ Get Node IP and port:
+
+   export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}')
+   export NODE_PORT=$(kubectl get svc {{ include "grafana-loki.fullname" . }}-grafana -n {{ include "grafana-loki.namespace" . }} -o jsonpath='{.spec.ports[0].nodePort}')
+
+2️⃣ Access Grafana:
+
+   http://$NODE_IP:$NODE_PORT
+
+{{- else }}
+
+1️⃣ Port-forward for local access:
+
+   kubectl port-forward -n {{ include "grafana-loki.namespace" . }} svc/{{ include "grafana-loki.fullname" . }}-grafana {{ .Values.service.grafana.port }}:{{ .Values.service.grafana.port }}
+
+2️⃣ Access Grafana:
+
+   http://localhost:{{ .Values.service.grafana.port }}
+
+{{- end }}
+
+{{- if .Values.ingress.enabled }}
+
+🌍 Ingress:
+   {{- range .Values.ingress.hosts }}
+   http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+   {{- end }}
+
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔑 GRAFANA LOGIN
+
+Username: {{ .Values.grafana.admin.user }}
+Password: Get from secret:
+
+   kubectl get secret {{ include "grafana-loki.grafana.secretName" . }} -n {{ include "grafana-loki.namespace" . }} -o jsonpath='{.data.{{ .Values.grafana.admin.passwordKey }}}' | base64 --decode
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 COMMON OPERATIONS
+
+Monitor Pod Status:
+  kubectl get pods -n {{ include "grafana-loki.namespace" . }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+View Grafana Logs:
+  kubectl logs -n {{ include "grafana-loki.namespace" . }} -l app.kubernetes.io/instance={{ .Release.Name }} -c grafana -f
+
+View Loki Logs:
+  kubectl logs -n {{ include "grafana-loki.namespace" . }} -l app.kubernetes.io/instance={{ .Release.Name }} -c loki -f
+
+Check Loki Status:
+  curl http://localhost:3100/ready (via port-forward)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 NEXT STEPS
+
+1. Log into Grafana with the credentials above
+2. Navigate to Explore to start querying Loki logs
+3. Loki datasource is pre-configured and ready to use
+4. Configure log shippers (Promtail, Fluent Bit, etc.) to send logs to:
+   http://{{ include "grafana-loki.fullname" . }}-loki.{{ include "grafana-loki.namespace" . }}.svc.cluster.local:3100
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📖 Documentation: https://github.com/fireball-industries/fireball-podstore-charts
+🐛 Issues: https://github.com/fireball-industries/fireball-podstore-charts/issues
+
+Built with 🔥 by Fireball Industries - Patrick Ryan
+Because observability shouldn't require a PhD in YAML

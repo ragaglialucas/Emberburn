@@ -1,0 +1,215 @@
+{{- if .Values.pod.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "grafana-loki.fullname" . }}
+  namespace: {{ include "grafana-loki.namespace" . }}
+  labels:
+    {{- include "grafana-loki.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.pod.replicaCount }}
+  strategy:
+    type: {{ .Values.pod.strategy }}
+  selector:
+    matchLabels:
+      {{- include "grafana-loki.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.pod.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        checksum/loki-config: {{ include (print $.Template.BasePath "/configmap-loki.yaml") . | sha256sum }}
+        checksum/grafana-datasources: {{ include (print $.Template.BasePath "/configmap-grafana-datasources.yaml") . | sha256sum }}
+      labels:
+        {{- include "grafana-loki.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.pod.serviceAccount.create }}
+      serviceAccountName: {{ include "grafana-loki.serviceAccountName" . }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.pod.podSecurityContext | nindent 8 }}
+      
+      {{- if .Values.initContainer.enabled }}
+      initContainers:
+      - name: init-loki
+        image: "{{ .Values.initContainer.image.repository }}:{{ .Values.initContainer.image.tag }}"
+        imagePullPolicy: {{ .Values.initContainer.image.pullPolicy }}
+        command: ['sh', '-c', 'mkdir -p /loki/chunks /loki/index /loki/compactor && chown -R 10001:10001 /loki']
+        volumeMounts:
+        - name: loki-storage
+          mountPath: /loki
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+      {{- end }}
+      
+      containers:
+      # Grafana Container
+      {{- if .Values.grafana.enabled }}
+      - name: grafana
+        image: "{{ .Values.grafana.image.repository }}:{{ .Values.grafana.image.tag }}"
+        imagePullPolicy: {{ .Values.grafana.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "grafana-loki.grafana.secretName" . }}
+              key: {{ .Values.grafana.admin.userKey }}
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "grafana-loki.grafana.secretName" . }}
+              key: {{ .Values.grafana.admin.passwordKey }}
+        {{- if .Values.grafana.config.plugins }}
+        - name: GF_INSTALL_PLUGINS
+          value: {{ .Values.grafana.config.plugins | quote }}
+        {{- end }}
+        - name: GF_PATHS_PROVISIONING
+          value: /etc/grafana/provisioning
+        - name: GF_LOG_LEVEL
+          value: {{ .Values.grafana.config.log.level | quote }}
+        - name: GF_SERVER_ROOT_URL
+          value: {{ .Values.grafana.config.server.rootUrl | quote }}
+        - name: GF_ANALYTICS_REPORTING_ENABLED
+          value: {{ .Values.grafana.config.analytics.reportingEnabled | quote }}
+        - name: GF_ANALYTICS_CHECK_FOR_UPDATES
+          value: {{ .Values.grafana.config.analytics.checkForUpdates | quote }}
+        
+        volumeMounts:
+        - name: grafana-storage
+          mountPath: {{ .Values.grafana.persistence.mountPath }}
+        - name: grafana-datasources
+          mountPath: /etc/grafana/provisioning/datasources
+        - name: tmp
+          mountPath: /tmp
+        - name: grafana-runtime
+          mountPath: /var/lib/grafana/plugins
+          subPath: plugins
+        - name: grafana-runtime
+          mountPath: /var/log/grafana
+          subPath: logs
+        
+        resources:
+          {{- include "grafana-loki.grafana.resources" . | nindent 10 }}
+        
+        securityContext:
+          {{- toYaml .Values.grafana.securityContext | nindent 10 }}
+        
+        {{- if .Values.grafana.livenessProbe.enabled }}
+        livenessProbe:
+          {{- toYaml .Values.grafana.livenessProbe | nindent 10 }}
+        {{- end }}
+        
+        {{- if .Values.grafana.readinessProbe.enabled }}
+        readinessProbe:
+          {{- toYaml .Values.grafana.readinessProbe | nindent 10 }}
+        {{- end }}
+        
+        {{- if .Values.grafana.startupProbe.enabled }}
+        startupProbe:
+          {{- toYaml .Values.grafana.startupProbe | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      
+      # Loki Container
+      {{- if .Values.loki.enabled }}
+      - name: loki
+        image: "{{ .Values.loki.image.repository }}:{{ .Values.loki.image.tag }}"
+        imagePullPolicy: {{ .Values.loki.image.pullPolicy }}
+        args:
+        - -config.file=/etc/loki/loki.yaml
+        ports:
+        - name: http
+          containerPort: 3100
+          protocol: TCP
+        - name: grpc
+          containerPort: 9095
+          protocol: TCP
+        
+        volumeMounts:
+        - name: loki-config
+          mountPath: /etc/loki
+        - name: loki-storage
+          mountPath: {{ .Values.loki.persistence.mountPath }}
+        - name: tmp-loki
+          mountPath: /tmp
+        
+        resources:
+          {{- include "grafana-loki.loki.resources" . | nindent 10 }}
+        
+        securityContext:
+          {{- toYaml .Values.loki.securityContext | nindent 10 }}
+        
+        {{- if .Values.loki.livenessProbe.enabled }}
+        livenessProbe:
+          {{- toYaml .Values.loki.livenessProbe | nindent 10 }}
+        {{- end }}
+        
+        {{- if .Values.loki.readinessProbe.enabled }}
+        readinessProbe:
+          {{- toYaml .Values.loki.readinessProbe | nindent 10 }}
+        {{- end }}
+        
+        {{- if .Values.loki.startupProbe.enabled }}
+        startupProbe:
+          {{- toYaml .Values.loki.startupProbe | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      
+      volumes:
+      # Grafana volumes
+      {{- if .Values.grafana.enabled }}
+      - name: grafana-storage
+        {{- if .Values.grafana.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "grafana-loki.grafana.pvcName" . }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      - name: grafana-datasources
+        configMap:
+          name: {{ include "grafana-loki.fullname" . }}-grafana-datasources
+      - name: grafana-runtime
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+      {{- end }}
+      
+      # Loki volumes
+      {{- if .Values.loki.enabled }}
+      - name: loki-config
+        configMap:
+          name: {{ include "grafana-loki.fullname" . }}-loki-config
+      - name: loki-storage
+        {{- if .Values.loki.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "grafana-loki.loki.pvcName" . }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      - name: tmp-loki
+        emptyDir: {}
+      {{- end }}
+      
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

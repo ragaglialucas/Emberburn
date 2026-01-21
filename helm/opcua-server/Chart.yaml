@@ -11,7 +11,7 @@ description: |
   persistence, and a beautiful Python Flask web UI for configuration and monitoring.
 
 type: application
-version: 1.0.2
+version: 1.0.3
 appVersion: "1.0.0"
 
 keywords:
@@ -44,7 +44,7 @@ annotations:
   catalog.cattle.io/categories: Industrial IoT,OPC UA,Monitoring,SCADA
   catalog.cattle.io/certified: partner
   catalog.cattle.io/display-name: "Emberburn"
-  catalog.cattle.io/namespace: cattle-monitoring-system
+  catalog.cattle.io/namespace: default
   catalog.cattle.io/os: linux
   catalog.cattle.io/release-name: emberburn
   catalog.cattle.io/type: cluster-tool

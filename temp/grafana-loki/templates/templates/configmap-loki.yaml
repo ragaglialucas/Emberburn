@@ -1,0 +1,105 @@
+{{- if .Values.loki.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "grafana-loki.fullname" . }}-loki-config
+  namespace: {{ include "grafana-loki.namespace" . }}
+  labels:
+    {{- include "grafana-loki.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loki-config
+data:
+  loki.yaml: |
+    auth_enabled: {{ .Values.loki.config.authEnabled }}
+    
+    server:
+      http_listen_port: {{ .Values.loki.config.server.httpListenPort }}
+      grpc_listen_port: {{ .Values.loki.config.server.grpcListenPort }}
+      log_level: {{ .Values.loki.config.server.logLevel }}
+    
+    common:
+      path_prefix: /loki
+      storage:
+        filesystem:
+          chunks_directory: /loki/chunks
+          rules_directory: /loki/rules
+      replication_factor: 1
+      ring:
+        instance_addr: 127.0.0.1
+        kvstore:
+          store: inmemory
+    
+    schema_config:
+      configs:
+        - from: 2023-01-01
+          store: boltdb-shipper
+          object_store: filesystem
+          schema: v11
+          index:
+            prefix: index_
+            period: 24h
+    
+    storage_config:
+      boltdb_shipper:
+        active_index_directory: /loki/index
+        cache_location: /loki/index_cache
+        shared_store: filesystem
+      filesystem:
+        directory: /loki/chunks
+    
+    limits_config:
+      ingestion_rate_mb: {{ .Values.loki.config.limits.ingestionRateMb }}
+      ingestion_burst_size_mb: {{ .Values.loki.config.limits.ingestionBurstSizeMb }}
+      max_streams_per_user: {{ .Values.loki.config.limits.maxStreamsPerUser }}
+      max_global_streams_per_user: {{ .Values.loki.config.limits.maxGlobalStreamsPerUser }}
+      max_query_series: {{ .Values.loki.config.limits.maxQuerySeries }}
+      max_query_parallelism: {{ .Values.loki.config.limits.maxQueryParallelism }}
+      max_entries_limit_per_query: {{ .Values.loki.config.limits.maxEntriesLimitPerQuery }}
+      max_chunks_per_query: {{ .Values.loki.config.limits.maxChunksPerQuery }}
+      max_query_lookback: {{ .Values.loki.config.limits.maxQueryLookback }}
+      retention_period: {{ .Values.loki.config.limits.retentionPeriod }}
+      max_line_size: {{ .Values.loki.config.limits.maxLineSize }}
+      max_line_size_truncate: {{ .Values.loki.config.limits.maxLineSizeTruncate }}
+      max_label_name_length: {{ .Values.loki.config.limits.maxLabelNameLength }}
+      max_label_value_length: {{ .Values.loki.config.limits.maxLabelValueLength }}
+      max_label_names_per_series: {{ .Values.loki.config.limits.maxLabelNamesPerSeries }}
+      cardinality_limit: {{ .Values.loki.config.limits.cardinalityLimit }}
+      split_queries_by_interval: {{ .Values.loki.config.limits.splitQueriesByInterval }}
+    
+    {{- if .Values.loki.config.compactor.enabled }}
+    compactor:
+      working_directory: /loki/compactor
+      shared_store: filesystem
+      compaction_interval: {{ .Values.loki.config.compactor.compactionInterval }}
+      retention_enabled: {{ .Values.loki.config.compactor.retentionEnabled }}
+      retention_delete_delay: {{ .Values.loki.config.compactor.retentionDeleteDelay }}
+      retention_delete_worker_count: {{ .Values.loki.config.compactor.retentionDeleteWorkerCount }}
+    {{- end }}
+    
+    query_scheduler:
+      max_outstanding_requests_per_tenant: 256
+    
+    frontend_worker:
+      match_max_concurrent: true
+    
+    query_range:
+      align_queries_with_step: true
+      max_retries: 5
+      parallelise_shardable_queries: true
+      cache_results: true
+      results_cache:
+        cache:
+          enable_fifocache: true
+          fifocache:
+            max_size_bytes: 500MB
+            validity: 24h
+    
+    chunk_store_config:
+      max_look_back_period: 0s
+    
+    table_manager:
+      retention_deletes_enabled: true
+      retention_period: {{ .Values.loki.config.limits.retentionPeriod }}
+    
+    analytics:
+      reporting_enabled: false
+{{- end }}

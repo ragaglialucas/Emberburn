@@ -1,0 +1,19 @@
+{{- if and .Values.grafana.enabled .Values.grafana.persistence.enabled (not .Values.grafana.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "grafana-loki.grafana.pvcName" . }}
+  namespace: {{ include "grafana-loki.namespace" . }}
+  labels:
+    {{- include "grafana-loki.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana-storage
+spec:
+  accessModes:
+    - {{ .Values.grafana.persistence.accessMode }}
+  {{- if .Values.grafana.persistence.storageClass }}
+  storageClassName: {{ .Values.grafana.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.grafana.persistence.size }}
+{{- end }}

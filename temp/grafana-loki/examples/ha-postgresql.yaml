@@ -1,0 +1,134 @@
+# High Availability PostgreSQL Configuration
+# 3-node cluster with streaming replication
+# Synchronous commit for data safety
+
+deploymentMode: ha
+resourcePreset: large
+
+highAvailability:
+  enabled: true
+  replicas: 3
+  
+  replication:
+    synchronous: true
+    synchronousCommit: "remote_apply"
+    numSynchronousReplicas: 1
+
+postgresql:
+  auth:
+    database: production_data
+    username: app_user
+    authMethod: "scram-sha-256"
+  
+  extensions:
+    timescaledb:
+      enabled: true
+    postgis:
+      enabled: true
+    pgStatStatements:
+      enabled: true
+  
+  initialDatabases:
+    - name: production_data
+      owner: app_user
+      encoding: UTF8
+      locale: en_US.utf8
+    
+    - name: quality_metrics
+      owner: app_user
+      encoding: UTF8
+      locale: en_US.utf8
+    
+    - name: maintenance_logs
+      owner: app_user
+      encoding: UTF8
+      locale: en_US.utf8
+    
+    - name: energy_consumption
+      owner: app_user
+      encoding: UTF8
+      locale: en_US.utf8
+    
+    - name: scada_historian
+      owner: app_user
+      encoding: UTF8
+      locale: en_US.utf8
+    
+    - name: audit_trail
+      owner: app_user
+      encoding: UTF8
+      locale: en_US.utf8
+  
+  config:
+    max_connections: "1000"
+    shared_buffers: "8GB"
+    effective_cache_size: "24GB"
+    work_mem: "32MB"
+    maintenance_work_mem: "2GB"
+    checkpoint_timeout: "15min"
+    max_wal_size: "4GB"
+
+persistence:
+  enabled: true
+  size: 500Gi
+  # Use your cluster's fast storage class
+  storageClass: ""  # Update to your SSD storage class
+  
+  wal:
+    enabled: true
+    size: 100Gi
+    storageClass: ""  # Update to your SSD storage class
+
+backup:
+  enabled: true
+  schedule: "0 */6 * * *"  # Every 6 hours
+  retention: 60  # 60 days
+  destination:
+    type: pvc
+    pvc:
+      size: 1Ti
+
+monitoring:
+  enabled: true
+  exporter:
+    enabled: true
+  serviceMonitor:
+    interval: 15s
+
+pgbouncer:
+  enabled: true
+  poolMode: transaction
+  maxClientConn: 2000
+  defaultPoolSize: 50
+
+security:
+  tls:
+    enabled: true
+    source: cert-manager
+    certManager:
+      issuerRef:
+        name: letsencrypt-prod  # Update to your issuer
+        kind: ClusterIssuer
+  
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    fsGroup: 999
+    seccompProfile:
+      type: RuntimeDefault
+
+networkPolicy:
+  enabled: true
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2  # Always keep 2 replicas running
+
+# Spread pods across nodes
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: postgresql-pod
+        topologyKey: kubernetes.io/hostname

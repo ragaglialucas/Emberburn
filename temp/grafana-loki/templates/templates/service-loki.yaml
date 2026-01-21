@@ -1,0 +1,27 @@
+{{- if .Values.loki.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "grafana-loki.fullname" . }}-loki
+  namespace: {{ include "grafana-loki.namespace" . }}
+  labels:
+    {{- include "grafana-loki.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loki
+  {{- with .Values.service.loki.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.loki.type }}
+  ports:
+    - port: {{ .Values.service.loki.httpPort }}
+      targetPort: {{ .Values.service.loki.httpTargetPort }}
+      protocol: TCP
+      name: http
+    - port: {{ .Values.service.loki.grpcPort }}
+      targetPort: {{ .Values.service.loki.grpcTargetPort }}
+      protocol: TCP
+      name: grpc
+  selector:
+    {{- include "grafana-loki.selectorLabels" . | nindent 4 }}
+{{- end }}

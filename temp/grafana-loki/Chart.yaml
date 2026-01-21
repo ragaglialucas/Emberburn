@@ -1,0 +1,34 @@
+annotations:
+  catalog.cattle.io/categories: Forge Industrial,Monitoring,Observability
+  catalog.cattle.io/certified: partner
+  catalog.cattle.io/display-name: Grafana + Loki Pod
+  catalog.cattle.io/namespace: observability
+  catalog.cattle.io/os: linux
+  catalog.cattle.io/release-name: grafana-loki
+  catalog.cattle.io/type: cluster-tool
+apiVersion: v2
+appVersion: grafana-10.2.3-loki-2.9.3
+description: All-in-one observability solution - Grafana with integrated Loki log
+  aggregation in a single pod for isolated, production-ready deployments
+home: https://github.com/fireball-industries/fireball-podstore-charts
+icon: https://raw.githubusercontent.com/grafana/grafana/main/public/img/grafana_icon.svg
+keywords:
+- grafana
+- loki
+- observability
+- logging
+- monitoring
+- dashboards
+- log-aggregation
+- forge-industrial
+maintainers:
+- email: patrick@fireball-industries.com
+  name: Patrick Ryan
+  url: https://fireball-industries.com
+name: grafana-loki
+sources:
+- https://grafana.com/
+- https://grafana.com/oss/loki/
+- https://github.com/fireball-industries/fireball-podstore-charts
+type: application
+version: 1.0.0

@@ -1,0 +1,296 @@
+# Rancher Questions for Grafana + Loki Chart
+# All-in-one observability pod deployment wizard
+
+categories:
+  - Observability
+  - Logging
+  - Monitoring
+
+questions:
+
+# ==================== Namespace Configuration ====================
+- variable: namespace.name
+  default: "grafana-loki"
+  description: "Kubernetes namespace for Grafana + Loki deployment"
+  type: string
+  label: Namespace
+  group: "Namespace"
+  required: true
+
+- variable: namespace.create
+  default: true
+  description: "Create the namespace if it doesn't exist"
+  type: boolean
+  label: Create Namespace
+  group: "Namespace"
+
+# ==================== Resource Presets ====================
+- variable: grafana.resources.preset
+  default: "medium"
+  description: "Resource allocation preset for Grafana"
+  type: enum
+  label: Grafana Resource Preset
+  group: "Resources"
+  required: true
+  options:
+    - "small"
+    - "medium"
+    - "large"
+    - "custom"
+  show_subquestion_if: "custom"
+  subquestions:
+    - variable: grafana.resources.custom.requests.cpu
+      type: string
+      label: Grafana CPU Request
+      default: "500m"
+    - variable: grafana.resources.custom.requests.memory
+      type: string
+      label: Grafana Memory Request
+      default: "1Gi"
+    - variable: grafana.resources.custom.limits.cpu
+      type: string
+      label: Grafana CPU Limit
+      default: "1000m"
+    - variable: grafana.resources.custom.limits.memory
+      type: string
+      label: Grafana Memory Limit
+      default: "2Gi"
+
+- variable: loki.resources.preset
+  default: "medium"
+  description: "Resource allocation preset for Loki"
+  type: enum
+  label: Loki Resource Preset
+  group: "Resources"
+  required: true
+  options:
+    - "small"
+    - "medium"
+    - "large"
+    - "custom"
+  show_subquestion_if: "custom"
+  subquestions:
+    - variable: loki.resources.custom.requests.cpu
+      type: string
+      label: Loki CPU Request
+      default: "1000m"
+    - variable: loki.resources.custom.requests.memory
+      type: string
+      label: Loki Memory Request
+      default: "2Gi"
+    - variable: loki.resources.custom.limits.cpu
+      type: string
+      label: Loki CPU Limit
+      default: "2000m"
+    - variable: loki.resources.custom.limits.memory
+      type: string
+      label: Loki Memory Limit
+      default: "4Gi"
+
+# ==================== Grafana Configuration ====================
+- variable: grafana.admin.user
+  default: "admin"
+  description: "Grafana admin username"
+  type: string
+  label: Admin Username
+  group: "Grafana"
+  required: true
+
+- variable: grafana.admin.password
+  default: ""
+  description: "Grafana admin password (auto-generated if empty)"
+  type: password
+  label: Admin Password
+  group: "Grafana"
+
+- variable: grafana.config.plugins
+  default: ""
+  description: "Comma-separated list of Grafana plugins to install"
+  type: string
+  label: Plugins
+  group: "Grafana"
+
+- variable: grafana.dashboards.enabled
+  default: true
+  description: "Enable pre-configured sample dashboards"
+  type: boolean
+  label: Enable Sample Dashboards
+  group: "Grafana"
+
+# ==================== Storage Configuration ====================
+- variable: grafana.persistence.enabled
+  default: true
+  description: "Enable persistent storage for Grafana dashboards and data"
+  type: boolean
+  label: Enable Grafana Persistent Storage
+  group: "Storage"
+  show_subquestion_if: true
+  subquestions:
+    - variable: grafana.persistence.size
+      type: string
+      label: Grafana Storage Size
+      default: "10Gi"
+    - variable: grafana.persistence.storageClass
+      type: storageclass
+      label: Grafana Storage Class
+      description: "Leave empty for default"
+
+- variable: loki.persistence.enabled
+  default: true
+  description: "Enable persistent storage for Loki logs"
+  type: boolean
+  label: Enable Loki Persistent Storage
+  group: "Storage"
+  show_subquestion_if: true
+  subquestions:
+    - variable: loki.persistence.size
+      type: string
+      label: Loki Storage Size
+      default: "50Gi"
+      description: "Storage for log retention (larger = more retention)"
+    - variable: loki.persistence.storageClass
+      type: storageclass
+      label: Loki Storage Class
+      description: "Leave empty for default"
+
+# ==================== Loki Configuration ====================
+- variable: loki.config.limits.retentionPeriod
+  default: "744h"
+  description: "Log retention period (744h = 31 days)"
+  type: string
+  label: Log Retention Period
+  group: "Loki"
+
+- variable: loki.config.limits.ingestionRateMb
+  default: 10
+  description: "Maximum log ingestion rate in MB/s per stream"
+  type: int
+  label: Ingestion Rate Limit (MB/s)
+  group: "Loki"
+  min: 1
+  max: 100
+
+- variable: loki.config.limits.maxQueryLookback
+  default: "720h"
+  description: "Maximum query lookback period (720h = 30 days)"
+  type: string
+  label: Max Query Lookback
+  group: "Loki"
+
+# ==================== Service Configuration ====================
+- variable: service.grafana.type
+  default: "LoadBalancer"
+  description: "Service type for Grafana access"
+  type: enum
+  label: Grafana Service Type
+  group: "Networking"
+  required: true
+  options:
+    - "LoadBalancer"
+    - "NodePort"
+    - "ClusterIP"
+  show_subquestion_if: "NodePort"
+  subquestions:
+    - variable: service.grafana.nodePort
+      type: int
+      label: Grafana NodePort
+      description: "NodePort for Grafana (30000-32767, leave empty for auto)"
+      min: 30000
+      max: 32767
+
+- variable: service.grafana.loadBalancerIP
+  default: ""
+  description: "Request specific LoadBalancer IP (optional)"
+  type: string
+  label: Grafana LoadBalancer IP
+  group: "Networking"
+  show_if: "service.grafana.type=LoadBalancer"
+
+- variable: service.loki.type
+  default: "ClusterIP"
+  description: "Service type for Loki (typically internal only)"
+  type: enum
+  label: Loki Service Type
+  group: "Networking"
+  required: true
+  options:
+    - "ClusterIP"
+    - "NodePort"
+    - "LoadBalancer"
+
+# ==================== Ingress Configuration ====================
+- variable: ingress.enabled
+  default: false
+  description: "Enable Ingress for Grafana web interface"
+  type: boolean
+  label: Enable Ingress
+  group: "Networking"
+  show_subquestion_if: true
+  subquestions:
+    - variable: ingress.className
+      type: string
+      label: Ingress Class
+      description: "Ingress controller class (e.g., nginx, traefik)"
+      default: "nginx"
+    - variable: ingress.hosts[0].host
+      type: hostname
+      label: Hostname
+      description: "Hostname for Grafana access"
+      default: "grafana.local"
+    - variable: ingress.tls[0].secretName
+      type: string
+      label: TLS Secret Name
+      description: "Secret containing TLS certificate (optional)"
+    - variable: ingress.tls[0].hosts[0]
+      type: hostname
+      label: TLS Hostname
+      description: "Hostname for TLS certificate"
+      show_if: "ingress.tls[0].secretName!="
+
+# ==================== Advanced Configuration ====================
+- variable: loki.config.compactor.enabled
+  default: true
+  description: "Enable Loki compactor for log retention and cleanup"
+  type: boolean
+  label: Enable Compactor
+  group: "Advanced"
+
+- variable: loki.config.compactor.compactionInterval
+  default: "10m"
+  description: "How often to run compaction"
+  type: string
+  label: Compaction Interval
+  group: "Advanced"
+  show_if: "loki.config.compactor.enabled=true"
+
+- variable: pod.replicaCount
+  default: 1
+  description: "Number of pod replicas (typically 1 for single-pod deployment)"
+  type: int
+  label: Replica Count
+  group: "Advanced"
+  min: 1
+  max: 3
+
+# ==================== Monitoring ====================
+- variable: monitoring.enabled
+  default: false
+  description: "Enable Prometheus ServiceMonitor for metrics scraping"
+  type: boolean
+  label: Enable Prometheus Monitoring
+  group: "Monitoring"
+
+# ==================== Node Placement ====================
+- variable: nodeSelector
+  default: {}
+  description: "Node selector labels for pod placement (YAML format)"
+  type: map[string]
+  label: Node Selector
+  group: "Placement"
+
+- variable: tolerations
+  default: []
+  description: "Tolerations for pod scheduling (YAML format)"
+  type: array[map[string]]
+  label: Tolerations
+  group: "Placement"

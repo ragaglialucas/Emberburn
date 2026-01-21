@@ -1,0 +1,11 @@
+# Helm package files
+*.tgz
+*.tar.gz
+
+# Chart dependencies
+charts/
+Chart.lock
+
+# Test artifacts
+test-results/
+*.log

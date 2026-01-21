@@ -1,0 +1,96 @@
+# Data Warehouse Configuration
+# Optimized for analytics and reporting workloads
+# Large memory, parallel queries, read-heavy optimization
+
+deploymentMode: standalone
+resourcePreset: xlarge
+
+postgresql:
+  auth:
+    database: analytics
+    username: analyst
+    authMethod: "scram-sha-256"
+  
+  extensions:
+    timescaledb:
+      enabled: true
+    postgis:
+      enabled: true
+    pgStatStatements:
+      enabled: true
+  
+  initialDatabases:
+    - name: analytics
+      owner: analyst
+      encoding: UTF8
+      locale: en_US.utf8
+    
+    - name: historical_data
+      owner: analyst
+      encoding: UTF8
+      locale: en_US.utf8
+    
+    - name: reporting
+      owner: analyst
+      encoding: UTF8
+      locale: en_US.utf8
+  
+  config:
+    # Analytics-optimized settings
+    max_connections: "200"
+    shared_buffers: "16GB"
+    effective_cache_size: "48GB"
+    work_mem: "128MB"  # Large for complex queries
+    maintenance_work_mem: "4GB"
+    
+    # Less frequent checkpoints (read-heavy workload)
+    checkpoint_timeout: "30min"
+    max_wal_size: "8GB"
+    
+    # Optimizer for analytics
+    random_page_cost: "1.1"
+    effective_io_concurrency: "200"
+
+persistence:
+  enabled: true
+  size: 1Ti
+  # Fast SSD for data warehouse
+  storageClass: ""  # Update to your fast SSD class
+
+backup:
+  enabled: true
+  schedule: "0 1 * * 0"  # Weekly on Sunday at 1 AM
+  retention: 90  # Keep 90 days
+  destination:
+    type: pvc
+    pvc:
+      size: 500Gi
+
+monitoring:
+  enabled: true
+  exporter:
+    enabled: true
+  serviceMonitor:
+    interval: 60s  # Less frequent for analytics
+
+pgbouncer:
+  enabled: false  # Long-running analytical queries
+
+security:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    fsGroup: 999
+
+# Custom settings for analytics
+customPostgresqlConf:
+  # Parallel query execution
+  max_parallel_workers_per_gather: "4"
+  max_parallel_workers: "8"
+  max_worker_processes: "8"
+  
+  # Query planner
+  default_statistics_target: "100"
+  constraint_exclusion: "partition"
+  from_collapse_limit: "12"
+  join_collapse_limit: "12"

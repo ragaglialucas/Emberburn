@@ -1,0 +1,32 @@
+# Helm artifacts
+*.tgz
+*.tar.gz
+charts/
+Chart.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test results
+test-results/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Backup files
+*.bak
+*.backup
+
+# PowerShell
+*.ps1.bak

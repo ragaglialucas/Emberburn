@@ -1,0 +1,77 @@
+# Edge Gateway Configuration
+# Lightweight PostgreSQL for edge computing
+# Optimized for resource-constrained IoT gateways
+
+deploymentMode: standalone
+resourcePreset: edge
+
+postgresql:
+  auth:
+    database: edge_data
+    username: edge_user
+    authMethod: "scram-sha-256"
+  
+  extensions:
+    timescaledb:
+      enabled: true
+    postgis:
+      enabled: false  # Save resources
+    pgStatStatements:
+      enabled: false
+  
+  initialDatabases:
+    - name: edge_data
+      owner: edge_user
+      encoding: UTF8
+      locale: en_US.utf8
+    
+    - name: sensor_buffer
+      owner: edge_user
+      encoding: UTF8
+      locale: en_US.utf8
+  
+  config:
+    max_connections: "100"
+    shared_buffers: "128MB"
+    work_mem: "4MB"
+    # Aggressive autovacuum for small datasets
+    autovacuum_naptime: "30s"
+
+persistence:
+  enabled: true
+  size: 10Gi
+
+backup:
+  enabled: true
+  schedule: "0 3 * * *"  # 3 AM daily
+  retention: 7  # Only keep 1 week on edge
+  destination:
+    type: pvc
+    pvc:
+      size: 20Gi
+
+monitoring:
+  enabled: true
+  exporter:
+    enabled: true
+
+pgbouncer:
+  enabled: false  # Save resources
+
+security:
+  tls:
+    enabled: false  # Often challenging on edge devices
+  
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+
+# Tolerate edge node taints
+tolerations:
+  - key: "node-role.kubernetes.io/edge"
+    operator: "Exists"
+    effect: "NoSchedule"
+
+# Schedule on edge nodes
+nodeSelector:
+  node-role.kubernetes.io/edge: ""

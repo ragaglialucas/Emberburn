@@ -1,0 +1,106 @@
+# Factory Database Configuration
+# Production deployment optimized for industrial IoT/SCADA
+# Includes TimescaleDB for time-series sensor data
+
+deploymentMode: standalone
+resourcePreset: medium
+
+postgresql:
+  auth:
+    database: scada_historian
+    username: scada_user
+    authMethod: "scram-sha-256"
+  
+  extensions:
+    timescaledb:
+      enabled: true
+    postgis:
+      enabled: true
+    pgStatStatements:
+      enabled: true
+  
+  initialDatabases:
+    - name: scada_historian
+      owner: scada_user
+      encoding: UTF8
+      locale: en_US.utf8
+    
+    - name: production_data
+      owner: scada_user
+      encoding: UTF8
+      locale: en_US.utf8
+    
+    - name: quality_metrics
+      owner: scada_user
+      encoding: UTF8
+      locale: en_US.utf8
+    
+    - name: energy_consumption
+      owner: scada_user
+      encoding: UTF8
+      locale: en_US.utf8
+    
+    - name: maintenance_logs
+      owner: scada_user
+      encoding: UTF8
+      locale: en_US.utf8
+  
+  config:
+    # Optimized for time-series writes
+    checkpoint_timeout: "10min"
+    max_wal_size: "2GB"
+    shared_buffers: "2GB"
+    work_mem: "32MB"
+    
+    # Logging for production
+    log_min_duration_statement: "1000"
+    log_statement: "ddl"
+
+persistence:
+  enabled: true
+  size: 200Gi
+  
+  # Separate WAL volume for better performance
+  wal:
+    enabled: true
+    size: 50Gi
+
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # 2 AM daily
+  retention: 30
+  destination:
+    type: pvc
+    pvc:
+      size: 100Gi
+
+monitoring:
+  enabled: true
+  exporter:
+    enabled: true
+  serviceMonitor:
+    interval: 30s
+
+pgbouncer:
+  enabled: true
+  poolMode: transaction
+  maxClientConn: 500
+  defaultPoolSize: 25
+
+security:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    fsGroup: 999
+
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              environment: production
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

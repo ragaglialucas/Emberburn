@@ -1,0 +1,232 @@
+{{- if ne (include "postgresql-pod.isHA" .) "true" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "postgresql-pod.fullname" . }}
+  namespace: {{ include "postgresql-pod.namespace" . }}
+  labels:
+    {{- include "postgresql-pod.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # PostgreSQL needs clean shutdown
+  selector:
+    matchLabels:
+      {{- include "postgresql-pod.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "postgresql-pod.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.global.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "postgresql-pod.serviceAccountName" . }}
+      {{- with .Values.security.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: postgresql
+          image: {{ include "postgresql-pod.image" . }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          {{- with .Values.security.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.postgresql.auth.username | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "postgresql-pod.fullname" . }}
+                  key: password
+            - name: POSTGRES_DB
+              value: {{ .Values.postgresql.auth.database | quote }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            {{- if .Values.postgresql.extensions.timescaledb.enabled }}
+            - name: TIMESCALEDB_ENABLED
+              value: "true"
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            {{- if .Values.persistence.wal.enabled }}
+            - name: wal
+              mountPath: {{ .Values.persistence.wal.mountPath }}
+            {{- end }}
+            - name: config
+              mountPath: /etc/postgresql/postgresql.conf
+              subPath: postgresql.conf
+            - name: config
+              mountPath: /etc/postgresql/pg_hba.conf
+              subPath: pg_hba.conf
+            {{- if .Values.postgresql.initScripts.enabled }}
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+            {{- end }}
+            {{- if .Values.security.tls.enabled }}
+            - name: certs
+              mountPath: /etc/postgresql/certs
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U {{ .Values.postgresql.auth.username }} -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U {{ .Values.postgresql.auth.username }} -h 127.0.0.1 -p 5432
+                  [ -f /var/lib/postgresql/data/pgdata/postmaster.pid ] || exit 1
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          resources:
+            {{- include "postgresql-pod.resources" . | nindent 12 }}
+        
+        {{- if .Values.pgbouncer.enabled }}
+        - name: pgbouncer
+          image: {{ printf "%s/%s:%s" .Values.pgbouncer.image.registry .Values.pgbouncer.image.repository .Values.pgbouncer.image.tag }}
+          imagePullPolicy: {{ .Values.pgbouncer.image.pullPolicy }}
+          ports:
+            - name: pgbouncer
+              containerPort: 6432
+              protocol: TCP
+          env:
+            - name: POSTGRESQL_HOST
+              value: "127.0.0.1"
+            - name: POSTGRESQL_PORT
+              value: "5432"
+            - name: POSTGRESQL_USERNAME
+              value: {{ .Values.postgresql.auth.username | quote }}
+            - name: POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "postgresql-pod.fullname" . }}
+                  key: password
+            - name: POSTGRESQL_DATABASE
+              value: {{ .Values.postgresql.auth.database | quote }}
+            - name: PGBOUNCER_POOL_MODE
+              value: {{ .Values.pgbouncer.poolMode | quote }}
+            - name: PGBOUNCER_MAX_CLIENT_CONN
+              value: {{ .Values.pgbouncer.maxClientConn | quote }}
+            - name: PGBOUNCER_DEFAULT_POOL_SIZE
+              value: {{ .Values.pgbouncer.defaultPoolSize | quote }}
+          resources:
+            {{- toYaml .Values.pgbouncer.resources | nindent 12 }}
+        {{- end }}
+        
+        {{- if .Values.monitoring.exporter.enabled }}
+        - name: postgres-exporter
+          image: {{ printf "%s/%s:%s" .Values.monitoring.exporter.image.registry .Values.monitoring.exporter.image.repository .Values.monitoring.exporter.image.tag }}
+          imagePullPolicy: {{ .Values.monitoring.exporter.image.pullPolicy }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.monitoring.exporter.port }}
+              protocol: TCP
+          env:
+            - name: DATA_SOURCE_URI
+              value: "127.0.0.1:5432/{{ .Values.postgresql.auth.database }}?sslmode=disable"
+            - name: DATA_SOURCE_USER
+              value: {{ .Values.postgresql.auth.username | quote }}
+            - name: DATA_SOURCE_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "postgresql-pod.fullname" . }}
+                  key: password
+          resources:
+            {{- toYaml .Values.monitoring.exporter.resources | nindent 12 }}
+        {{- end }}
+        
+        {{- with .Values.sidecars }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "postgresql-pod.fullname" . }}-config
+        {{- if .Values.postgresql.initScripts.enabled }}
+        - name: init-scripts
+          configMap:
+            name: {{ include "postgresql-pod.fullname" . }}-init-scripts
+        {{- end }}
+        {{- if .Values.security.tls.enabled }}
+        - name: certs
+          secret:
+            secretName: {{ .Values.security.tls.secretName }}
+            defaultMode: 0600
+        {{- end }}
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "postgresql-pod.fullname" . }}-data
+        {{- if .Values.persistence.wal.enabled }}
+        - name: wal
+          persistentVolumeClaim:
+            claimName: {{ include "postgresql-pod.fullname" . }}-wal
+        {{- end }}
+        {{- else }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+{{- end }}

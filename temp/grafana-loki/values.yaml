@@ -1,0 +1,468 @@
+# Default values for grafana-loki Helm chart
+# Grafana + Loki All-in-One Observability Pod
+# Fireball Industries Podstore - Patrick Ryan
+
+# -- Namespace configuration
+namespace:
+  # -- Create the namespace automatically
+  create: true
+  # -- Namespace name
+  name: "grafana-loki"
+
+# ==================== Pod Configuration ====================
+
+pod:
+  # -- Enable the Grafana + Loki pod
+  enabled: true
+  
+  # -- Number of replicas (typically 1 for single-pod deployment)
+  replicaCount: 1
+  
+  # -- Pod restart strategy (Recreate to avoid PV conflicts)
+  strategy: Recreate
+  
+  # -- Pod annotations
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3000"
+    prometheus.io/path: "/metrics"
+  
+  # -- Pod security context
+  podSecurityContext:
+    runAsNonRoot: true
+    fsGroup: 472  # Grafana group
+    seccompProfile:
+      type: RuntimeDefault
+  
+  # -- Service account
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: ""
+
+# ==================== Grafana Configuration ====================
+
+grafana:
+  # -- Enable Grafana container
+  enabled: true
+  
+  # -- Container image configuration
+  image:
+    repository: "grafana/grafana"
+    tag: "10.2.3"
+    pullPolicy: IfNotPresent
+  
+  # -- Admin credentials
+  admin:
+    # -- Admin username
+    user: "admin"
+    # -- Admin password (auto-generated if empty)
+    password: ""
+    # -- Use existing secret for credentials
+    existingSecret: ""
+    userKey: "admin-user"
+    passwordKey: "admin-password"
+  
+  # -- Grafana configuration
+  config:
+    # -- Server settings
+    server:
+      rootUrl: "%(protocol)s://%(domain)s/"
+      
+    # -- Security settings
+    security:
+      adminUser: "admin"
+      
+    # -- Analytics (disabled)
+    analytics:
+      reportingEnabled: false
+      checkForUpdates: false
+      
+    # -- Logging
+    log:
+      level: "info"
+      
+    # -- Plugins to install (comma-separated)
+    plugins: ""
+  
+  # -- Grafana.ini custom configuration
+  grafanaIni: {}
+    # server:
+    #   domain: example.com
+  
+  # -- Persistent storage for Grafana
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: "10Gi"
+    mountPath: /var/lib/grafana
+    existingClaim: ""
+  
+  # -- Resource configuration
+  resources:
+    # -- Resource preset (small, medium, large, custom)
+    preset: "medium"
+    
+    presets:
+      small:
+        requests:
+          cpu: "250m"
+          memory: "512Mi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
+      medium:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "1000m"
+          memory: "2Gi"
+      large:
+        requests:
+          cpu: "1000m"
+          memory: "2Gi"
+        limits:
+          cpu: "2000m"
+          memory: "4Gi"
+    
+    # -- Custom resources (used when preset is "custom")
+    custom:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"
+  
+  # -- Container security context
+  securityContext:
+    runAsUser: 472
+    runAsGroup: 472
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+  
+  # -- Liveness probe configuration
+  livenessProbe:
+    enabled: true
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  
+  # -- Readiness probe configuration
+  readinessProbe:
+    enabled: true
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 3
+  
+  # -- Startup probe configuration
+  startupProbe:
+    enabled: true
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 30
+  
+  # -- Datasources configuration (Loki pre-configured)
+  datasources:
+    loki:
+      enabled: true
+      url: "http://localhost:3100"
+      isDefault: true
+  
+  # -- Sample dashboards
+  dashboards:
+    enabled: true
+
+# ==================== Loki Configuration ====================
+
+loki:
+  # -- Enable Loki container
+  enabled: true
+  
+  # -- Container image configuration
+  image:
+    repository: "grafana/loki"
+    tag: "2.9.3"
+    pullPolicy: IfNotPresent
+  
+  # -- Loki configuration
+  config:
+    # -- Authentication
+    authEnabled: false
+    
+    # -- Server settings
+    server:
+      httpListenPort: 3100
+      grpcListenPort: 9095
+      logLevel: "info"
+    
+    # -- Limits configuration
+    limits:
+      # Ingestion limits
+      ingestionRateMb: 10
+      ingestionBurstSizeMb: 20
+      maxStreamsPerUser: 0
+      maxGlobalStreamsPerUser: 10000
+      
+      # Query limits
+      maxQuerySeries: 1000
+      maxQueryParallelism: 32
+      maxEntriesLimitPerQuery: 10000
+      maxChunksPerQuery: 2000000
+      maxQueryLookback: "720h"
+      
+      # Retention period (configurable per preset)
+      retentionPeriod: "744h"  # 31 days
+      
+      # Line size limits
+      maxLineSize: 256000
+      maxLineSizeTruncate: true
+      
+      # Label limits
+      maxLabelNameLength: 1024
+      maxLabelValueLength: 2048
+      maxLabelNamesPerSeries: 30
+      
+      # Cardinality
+      cardinalityLimit: 100000
+      
+      # Split queries
+      splitQueriesByInterval: "24h"
+    
+    # -- Storage configuration
+    storage:
+      retentionDays: 31
+      
+    # -- Compactor settings
+    compactor:
+      enabled: true
+      compactionInterval: "10m"
+      retentionEnabled: true
+      retentionDeleteDelay: "2h"
+      retentionDeleteWorkerCount: 150
+  
+  # -- Custom Loki YAML configuration
+  customConfig: {}
+  
+  # -- Persistent storage for Loki
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: "50Gi"
+    mountPath: /loki
+    existingClaim: ""
+  
+  # -- Resource configuration
+  resources:
+    # -- Resource preset (small, medium, large, custom)
+    preset: "medium"
+    
+    presets:
+      small:
+        requests:
+          cpu: "250m"
+          memory: "512Mi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
+      medium:
+        requests:
+          cpu: "1000m"
+          memory: "2Gi"
+        limits:
+          cpu: "2000m"
+          memory: "4Gi"
+      large:
+        requests:
+          cpu: "2000m"
+          memory: "4Gi"
+        limits:
+          cpu: "4000m"
+          memory: "8Gi"
+    
+    # -- Custom resources (used when preset is "custom")
+    custom:
+      requests:
+        cpu: "1000m"
+        memory: "2Gi"
+      limits:
+        cpu: "2000m"
+        memory: "4Gi"
+  
+  # -- Container security context
+  securityContext:
+    runAsUser: 10001
+    runAsGroup: 10001
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+  
+  # -- Liveness probe configuration
+  livenessProbe:
+    enabled: true
+    httpGet:
+      path: /ready
+      port: 3100
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  
+  # -- Readiness probe configuration
+  readinessProbe:
+    enabled: true
+    httpGet:
+      path: /ready
+      port: 3100
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 3
+  
+  # -- Startup probe configuration
+  startupProbe:
+    enabled: true
+    httpGet:
+      path: /ready
+      port: 3100
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 30
+
+# ==================== Service Configuration ====================
+
+service:
+  # -- Grafana service configuration
+  grafana:
+    # -- Service type (LoadBalancer, NodePort, ClusterIP)
+    type: LoadBalancer
+    annotations: {}
+    loadBalancerIP: ""
+    # -- Ports configuration
+    port: 3000
+    targetPort: 3000
+    nodePort: null
+  
+  # -- Loki service configuration
+  loki:
+    # -- Service type (typically ClusterIP for internal use)
+    type: ClusterIP
+    annotations: {}
+    # -- HTTP port
+    httpPort: 3100
+    httpTargetPort: 3100
+    # -- gRPC port
+    grpcPort: 9095
+    grpcTargetPort: 9095
+
+# ==================== Ingress Configuration ====================
+
+ingress:
+  # -- Enable Ingress for Grafana
+  enabled: false
+  className: "nginx"
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: grafana.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+    # - secretName: grafana-tls
+    #   hosts:
+    #     - grafana.local
+
+# ==================== Init Container ====================
+
+initContainer:
+  # -- Init container to set up Loki directories
+  enabled: true
+  image:
+    repository: "busybox"
+    tag: "1.36"
+    pullPolicy: IfNotPresent
+
+# ==================== Node Placement ====================
+
+# -- Node selector for pod assignment
+nodeSelector: {}
+
+# -- Tolerations for pod assignment
+tolerations: []
+
+# -- Affinity rules
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - grafana-loki-pod
+          topologyKey: kubernetes.io/hostname
+
+# ==================== Monitoring ====================
+
+monitoring:
+  enabled: false
+  
+  serviceMonitor:
+    enabled: false
+    interval: "30s"
+    scrapeTimeout: "10s"
+    labels: {}
+
+# ==================== Pod Disruption Budget ====================
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# ==================== Network Policy ====================
+
+networkPolicy:
+  enabled: false
+  
+  ingress:
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 3000
+        - protocol: TCP
+          port: 3100
+  
+  egress:
+    - to:
+        - namespaceSelector: {}
+    - ports:
+        - protocol: UDP
+          port: 53

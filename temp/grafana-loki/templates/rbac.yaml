@@ -1,0 +1,52 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "postgresql-pod.fullname" . }}
+  namespace: {{ include "postgresql-pod.namespace" . }}
+  labels:
+    {{- include "postgresql-pod.labels" . | nindent 4 }}
+rules:
+  # Allow reading ConfigMaps for configuration
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  
+  # Allow reading Secrets for credentials
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+  
+  # Allow creating events for logging
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  
+  {{- if eq (include "postgresql-pod.isHA" .) "true" }}
+  # For HA: allow reading endpoints to discover replicas
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch"]
+  
+  # For HA: allow reading pods
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "postgresql-pod.fullname" . }}
+  namespace: {{ include "postgresql-pod.namespace" . }}
+  labels:
+    {{- include "postgresql-pod.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "postgresql-pod.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "postgresql-pod.serviceAccountName" . }}
+    namespace: {{ include "postgresql-pod.namespace" . }}
+{{- end }}

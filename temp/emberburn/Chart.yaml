@@ -1,5 +1,5 @@
 annotations:
-  catalog.cattle.io/categories: Forge Industrial,IoT Gateway,SCADA,OPC UA,Monitoring
+  catalog.cattle.io/categories: Industrial IoT,OPC UA,Monitoring,SCADA
   catalog.cattle.io/certified: partner
   catalog.cattle.io/display-name: Emberburn
   catalog.cattle.io/featured: "true"
@@ -44,4 +44,4 @@ sources:
 - https://github.com/Embernet-ai/helm-charts
 - https://github.com/Embernet-ai/Small-Application
 type: application
-version: 1.0.1
+version: 1.0.2

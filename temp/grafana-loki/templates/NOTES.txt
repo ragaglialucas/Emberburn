@@ -1,0 +1,122 @@
+{{- $preset := index .Values.resourcePresets .Values.resourcePreset -}}
+================================================================================
+🔥 PostgreSQL Pod - Fireball Industries Edition 🔥
+================================================================================
+
+Congratulations! You've deployed PostgreSQL to Kubernetes.
+Your industrial IoT data now has a home that isn't an Excel spreadsheet.
+
+Patrick Ryan's Deployment Summary:
+----------------------------------
+Mode: {{ .Values.deploymentMode }}
+Preset: {{ .Values.resourcePreset }} ({{ $preset.description }})
+{{- if eq .Values.deploymentMode "ha" }}
+Replicas: {{ .Values.highAvailability.replicas }}
+{{- else }}
+Replicas: 1 (living dangerously, I see)
+{{- end }}
+Extensions: 
+  {{- if .Values.postgresql.extensions.timescaledb.enabled }} ✓ TimescaleDB{{ end }}
+  {{- if .Values.postgresql.extensions.postgis.enabled }} ✓ PostGIS{{ end }}
+  {{- if .Values.postgresql.extensions.pgStatStatements.enabled }} ✓ pg_stat_statements{{ end }}
+
+Connection Information:
+-----------------------
+{{- if eq .Values.deploymentMode "ha" }}
+Primary Service: {{ include "postgresql-pod.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+Headless Service: {{ include "postgresql-pod.fullname" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+{{- else }}
+Service: {{ include "postgresql-pod.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+{{- end }}
+
+Database: {{ .Values.postgresql.auth.database }}
+Username: {{ .Values.postgresql.auth.username }}
+
+Get your password:
+  kubectl get secret {{ include "postgresql-pod.fullname" . }} -n {{ .Release.Namespace }} -o jsonpath="{.data.password}" | base64 -d
+
+Connect from inside cluster:
+  kubectl run -it --rm --restart=Never postgres-client --image=postgres:{{ .Values.global.postgresqlVersion }} -- \
+    psql -h {{ include "postgresql-pod.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local -U {{ .Values.postgresql.auth.username }} -d {{ .Values.postgresql.auth.database }}
+
+{{- if .Values.monitoring.enabled }}
+
+Monitoring:
+-----------
+{{- if .Values.monitoring.exporter.enabled }}
+Prometheus Exporter: http://{{ include "postgresql-pod.fullname" . }}:{{ .Values.monitoring.exporter.port }}/metrics
+{{- end }}
+{{- if .Values.monitoring.serviceMonitor }}
+ServiceMonitor: Created (Prometheus Operator will scrape automatically)
+{{- end }}
+{{- end }}
+
+{{- if .Values.backup.enabled }}
+
+Backup Configuration:
+---------------------
+Schedule: {{ .Values.backup.schedule }}
+Destination: {{ .Values.backup.destination.type }}
+Retention: {{ .Values.backup.retention }} days
+
+Manual backup:
+  kubectl create job --from=cronjob/{{ include "postgresql-pod.fullname" . }}-backup manual-backup-$(date +%Y%m%d-%H%M%S) -n {{ .Release.Namespace }}
+{{- end }}
+
+{{- if .Values.pgbouncer.enabled }}
+
+PgBouncer:
+----------
+Connection pooling is enabled on port {{ .Values.service.port }}
+Max client connections: {{ .Values.pgbouncer.maxClientConn }}
+Pool mode: {{ .Values.pgbouncer.poolMode }}
+{{- end }}
+
+Initial Databases Created:
+--------------------------
+{{- range .Values.postgresql.initialDatabases }}
+  - {{ .name }}
+{{- end }}
+
+Pro Tips (from someone who's been there):
+-----------------------------------------
+1. Enable backups if you haven't already (backup.enabled=true)
+2. Monitor your connection count - it's always higher than you think
+3. Autovacuum is your friend, let it run
+4. Log slow queries (already configured for queries > 1s)
+5. For production, consider HA mode (deploymentMode=ha)
+6. TimescaleDB is enabled - perfect for your SCADA data
+7. Check the logs: kubectl logs -f {{ include "postgresql-pod.fullname" . }}-0 -n {{ .Release.Namespace }}
+
+{{- if eq .Values.resourcePreset "edge" }}
+
+⚠️  WARNING: You're using the 'edge' preset.
+    This is fine for Raspberry Pi clusters and "learning experiences"
+    but maybe not for mission-critical production data.
+    You've been warned. ☕
+{{- end }}
+
+{{- if not .Values.backup.enabled }}
+
+⚠️  BACKUP IS DISABLED
+    Living on the edge, huh? Hope you like adrenaline.
+    Enable with: --set backup.enabled=true
+{{- end }}
+
+{{- if .Values.development.enabled }}
+
+🚧 DEVELOPMENT MODE ENABLED 🚧
+    Security is relaxed. Debug logging is on.
+    This better not be production. 😱
+{{- end }}
+
+Need help?
+----------
+Documentation: https://github.com/fireball-industries/postgresql-pod
+Issues: Because there's always something...
+
+Happy querying! May your connections be pooled and your indexes be used.
+  - Patrick Ryan
+    (Powered by coffee, powered by spite, powered by PostgreSQL)
+
+================================================================================

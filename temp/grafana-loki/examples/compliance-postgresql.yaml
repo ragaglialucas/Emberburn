@@ -1,0 +1,158 @@
+# Compliance PostgreSQL Configuration
+# 21 CFR Part 11, ISO 9001, GDPR compliant
+# Full audit logging, encryption, data retention
+
+deploymentMode: ha
+resourcePreset: large
+
+highAvailability:
+  enabled: true
+  replicas: 3
+  replication:
+    synchronous: true
+    synchronousCommit: "remote_apply"
+    numSynchronousReplicas: 2  # Extra safety for compliance
+
+postgresql:
+  auth:
+    database: production_data
+    username: app_user
+    authMethod: "scram-sha-256"  # Strong authentication required
+  
+  extensions:
+    timescaledb:
+      enabled: true
+    postgis:
+      enabled: true
+    pgStatStatements:
+      enabled: true
+  
+  initialDatabases:
+    - name: production_data
+      owner: app_user
+      encoding: UTF8
+      locale: en_US.utf8
+    
+    - name: audit_trail
+      owner: app_user
+      encoding: UTF8
+      locale: en_US.utf8
+    
+    - name: quality_records
+      owner: app_user
+      encoding: UTF8
+      locale: en_US.utf8
+    
+    - name: electronic_signatures
+      owner: app_user
+      encoding: UTF8
+      locale: en_US.utf8
+  
+  config:
+    # Extensive logging for compliance
+    log_statement: "all"
+    log_connections: "on"
+    log_disconnections: "on"
+    log_duration: "on"
+    log_hostname: "on"
+    log_line_prefix: "%t [%p] [%u@%d] [%h] [%a] "
+    
+    # Data integrity
+    fsync: "on"
+    synchronous_commit: "remote_apply"
+    full_page_writes: "on"
+    
+    # Performance for compliance workloads
+    shared_buffers: "8GB"
+    effective_cache_size: "24GB"
+
+persistence:
+  enabled: true
+  size: 500Gi
+  # Use encrypted storage class
+  storageClass: ""  # Update to encrypted storage class
+
+backup:
+  enabled: true
+  schedule: "0 */4 * * *"  # Every 4 hours
+  retention: 2555  # 7 years for FDA compliance
+  destination:
+    type: s3  # S3 for long-term archival
+    s3:
+      bucket: ""  # Your compliance backup bucket
+      region: "us-east-1"
+      endpoint: ""
+      # Configure S3 credentials via existingSecret
+
+monitoring:
+  enabled: true
+  exporter:
+    enabled: true
+  serviceMonitor:
+    interval: 15s
+
+security:
+  tls:
+    enabled: true
+    source: cert-manager
+    certManager:
+      issuerRef:
+        name: compliance-issuer
+        kind: ClusterIssuer
+  
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    fsGroup: 999
+    seccompProfile:
+      type: RuntimeDefault
+  
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              compliance-zone: "validated"
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 443  # HTTPS for backup
+        - protocol: UDP
+          port: 53   # DNS
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+compliance:
+  cfrPart11:
+    enabled: true
+    auditLogging: true
+    electronicSignatures: true
+    dataIntegrity: true
+  
+  iso9001:
+    enabled: true
+    documentControl: true
+    recordRetention: true
+  
+  gdpr:
+    enabled: true
+    dataEncryption: true
+    rightToBeForgotten: true
+    auditTrail: true
+
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: postgresql-pod
+        topologyKey: kubernetes.io/hostname

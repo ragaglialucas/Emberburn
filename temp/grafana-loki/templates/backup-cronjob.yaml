@@ -1,0 +1,145 @@
+{{- if .Values.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "postgresql-pod.fullname" . }}-backup
+  namespace: {{ include "postgresql-pod.namespace" . }}
+  labels:
+    {{- include "postgresql-pod.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "postgresql-pod.selectorLabels" . | nindent 12 }}
+            fireball.industries/component: backup
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: {{ include "postgresql-pod.serviceAccountName" . }}
+          {{- with .Values.security.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: backup
+              image: {{ include "postgresql-pod.image" . }}
+              imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -eo pipefail
+                  
+                  # Patrick Ryan's backup script - because data loss is a resume-generating event
+                  echo "==================================================================="
+                  echo "PostgreSQL Backup - Fireball Industries"
+                  echo "Starting backup at $(date)"
+                  echo "==================================================================="
+                  
+                  # Database connection info
+                  PGHOST="{{ include "postgresql-pod.fullname" . }}.{{ include "postgresql-pod.namespace" . }}.svc.cluster.local"
+                  PGPORT="{{ .Values.service.port }}"
+                  PGUSER="{{ .Values.postgresql.auth.username }}"
+                  
+                  # Backup timestamp
+                  BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
+                  
+                  # Backup all databases
+                  {{- range .Values.postgresql.initialDatabases }}
+                  echo "Backing up database: {{ .name }}"
+                  BACKUP_FILE="/backup/{{ .name }}_${BACKUP_DATE}.dump"
+                  
+                  pg_dump {{ $.Values.backup.pgDumpOptions }} \
+                    -h ${PGHOST} \
+                    -p ${PGPORT} \
+                    -U ${PGUSER} \
+                    -d {{ .name }} \
+                    -f ${BACKUP_FILE}
+                  
+                  echo "✓ {{ .name }} backup complete: $(du -h ${BACKUP_FILE} | cut -f1)"
+                  {{- end }}
+                  
+                  # Also backup global objects (roles, tablespaces)
+                  echo "Backing up global objects..."
+                  pg_dumpall -h ${PGHOST} -p ${PGPORT} -U ${PGUSER} --globals-only \
+                    -f /backup/globals_${BACKUP_DATE}.sql
+                  
+                  {{- if eq .Values.backup.destination.type "s3" }}
+                  # Upload to S3
+                  echo "Uploading backups to S3..."
+                  aws s3 sync /backup/ s3://{{ .Values.backup.destination.s3.bucket }}/postgresql/{{ include "postgresql-pod.fullname" . }}/ \
+                    --endpoint-url {{ .Values.backup.destination.s3.endpoint }} \
+                    --region {{ .Values.backup.destination.s3.region }}
+                  {{- end }}
+                  
+                  # Cleanup old backups
+                  echo "Cleaning up backups older than {{ .Values.backup.retention }} days..."
+                  find /backup -type f -mtime +{{ .Values.backup.retention }} -delete
+                  
+                  echo "==================================================================="
+                  echo "Backup completed successfully at $(date)"
+                  echo "May your restores be swift and your data be eternal. - Patrick Ryan"
+                  echo "==================================================================="
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "postgresql-pod.fullname" . }}
+                      key: password
+                {{- if eq .Values.backup.destination.type "s3" }}
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.destination.s3.existingSecret | default (printf "%s-backup-s3" (include "postgresql-pod.fullname" .)) }}
+                      key: {{ .Values.backup.destination.s3.existingSecretKeyId }}
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.destination.s3.existingSecret | default (printf "%s-backup-s3" (include "postgresql-pod.fullname" .)) }}
+                      key: {{ .Values.backup.destination.s3.existingSecretAccessKey }}
+                {{- end }}
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+              resources:
+                {{- toYaml .Values.backup.resources | nindent 16 }}
+          
+          volumes:
+            {{- if eq .Values.backup.destination.type "pvc" }}
+            - name: backup
+              persistentVolumeClaim:
+                claimName: {{ include "postgresql-pod.fullname" . }}-backup
+            {{- else if eq .Values.backup.destination.type "nfs" }}
+            - name: backup
+              nfs:
+                server: {{ .Values.backup.destination.nfs.server }}
+                path: {{ .Values.backup.destination.nfs.path }}
+            {{- else }}
+            - name: backup
+              emptyDir: {}
+            {{- end }}
+
+---
+{{- if eq .Values.backup.destination.type "pvc" }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "postgresql-pod.fullname" . }}-backup
+  namespace: {{ include "postgresql-pod.namespace" . }}
+  labels:
+    {{- include "postgresql-pod.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.backup.destination.pvc.accessMode }}
+  {{- if .Values.backup.destination.pvc.storageClass }}
+  storageClassName: {{ .Values.backup.destination.pvc.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.backup.destination.pvc.size }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,33 @@
+{{- if and .Values.grafana.enabled .Values.grafana.datasources.loki.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "grafana-loki.fullname" . }}-grafana-datasources
+  namespace: {{ include "grafana-loki.namespace" . }}
+  labels:
+    {{- include "grafana-loki.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana-config
+data:
+  loki.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        access: proxy
+        url: {{ .Values.grafana.datasources.loki.url }}
+        isDefault: {{ .Values.grafana.datasources.loki.isDefault }}
+        version: 1
+        editable: true
+        jsonData:
+          maxLines: 1000
+          derivedFields:
+            - datasourceUid: loki
+              matcherRegex: "level=(\\w+)"
+              name: Level
+              url: ""
+            - datasourceUid: loki
+              matcherRegex: "trace_id=(\\w+)"
+              name: TraceID
+              url: ""
+        uid: loki
+{{- end }}
